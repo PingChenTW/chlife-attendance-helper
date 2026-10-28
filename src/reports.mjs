@@ -2,6 +2,7 @@ import { ensure, AppError } from './errors.mjs';
 import { weekOptions, requireWeek } from './weeks.mjs';
 import { ChlifeAdapter } from './upstream.mjs';
 import configuredBaselines from './report-config.json' with { type: 'json' };
+import profiles from './report-profiles.json' with { type: 'json' };
 
 const FIELDS = ['sunday', 'gospel', 'home-in', 'home-out', 'reading', 'group', 'children-sunday', 'children-group'];
 const count = value => Number.isSafeInteger(value) && value >= 0;
@@ -27,7 +28,11 @@ export function configuredReportSources(primary, json) {
 }
 export class ReportService {
   constructor(sources, { now = () => new Date(), baselines = configuredBaselines } = {}) { this.sources = sources; this.now = now; this.baselines = baselines; }
-  metadata() { return { weeks: weekOptions(this.now()), sources: this.sources.map(({key,label}) => ({key,label})) }; }
+  metadata() { return { weeks: weekOptions(this.now()), sources: this.sources.map(({key,label}) => ({key,label})), reportTypes:Object.entries(profiles).map(([key,{label,ready}])=>({key,label,ready})) }; }
+  async summary(query) {
+    requireWeek(query.week,this.now());
+    throw new AppError(501,'SUMMARY_NOT_READY','各大組總表已預留介面，待設定總帳號及確認欄位口徑後啟用。');
+  }
   async weekly(query) {
     const week = requireWeek(query.week,this.now());
     const source = this.sources.find(s => s.key === (query.source ?? 'primary'));

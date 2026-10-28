@@ -42,6 +42,7 @@ export function createApp({ service, reports = new ReportService(configuredRepor
         if (counter[kind] > (kind === 'write' ? 15 : 120)) { res.setHeader('Retry-After', String(Math.ceil((counter.reset - now) / 1000))); throw new AppError(429, 'RATE_LIMIT', '操作較頻繁，請稍後再試。'); }
         if (url.pathname === '/api/meta' && req.method === 'GET') { json(200, await service.metadata()); return; }
         if (url.pathname === '/api/reports/meta' && req.method === 'GET') { json(200,reports.metadata()); return; }
+        if (url.pathname === '/api/reports/summary' && req.method === 'GET') { json(200,await reports.summary({week:url.searchParams.get('week')}));return; }
         if (url.pathname === '/api/reports/weekly' && req.method === 'GET') {
           json(200,await reports.weekly({ week:url.searchParams.get('week'),source:url.searchParams.get('source') ?? 'primary',group:url.searchParams.get('group') })); return;
         }

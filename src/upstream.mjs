@@ -127,7 +127,9 @@ export class ChlifeAdapter {
       ensure(Array.isArray(data?.rows) && Array.isArray(data.meetings) && meetings.every(m=>data.meetings.some(column=>Number(column.id)===m.id)),502,'REPORT_SCHEMA','原網站報表欄位已變更，請聯絡管理者。');
       return scopes.map(scope => {
         const matches = data.rows.filter(row=>Number(row.node_id)===scope.ids[3] && !['direct','direct_lv2','ended_bucket'].includes(row.row_kind) && !row.node_deleted);
-        if (matches.length !== 1 || !matches[0].attendance) console.error('report-schema',JSON.stringify({audience,role,scope:scope.key,rows:data.rows.length,keys:Object.keys(data.rows[0] ?? {}),kinds:[...new Set(data.rows.map(row=>row.row_kind))],matched:data.rows.filter(row=>Number(row.node_id)===scope.ids[3]).map(row=>({kind:row.row_kind,deleted:row.node_deleted,keys:Object.keys(row)}))}));
+        // Official role-filtered weekly reports omit nodes with no members of that role.
+        // Verified against an empty children roster; do not apply this rule to general reports.
+        if (role && matches.length === 0) return Object.fromEntries(meetings.map(m=>[m.key,0]));
         ensure(matches.length===1 && matches[0].attendance && typeof matches[0].attendance==='object',502,'REPORT_INCOMPLETE','原網站報表小區資料不完整，請重新讀取。');
         return Object.fromEntries(meetings.map(m => {
           const value = matches[0].attendance[String(m.id)];

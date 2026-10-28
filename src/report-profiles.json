@@ -1,0 +1,16 @@
+{
+  "district-weekly": {
+    "label": "各小區週報",
+    "ready": true,
+    "rowLevel": 3
+  },
+  "all-groups": {
+    "label": "各大組總表",
+    "ready": false,
+    "rowLevel": 2,
+    "sourcePolicy": "single-authorized-master-account",
+    "compare": "previous-week",
+    "plannedColumns": ["年度基數", "主日", "繁增比例", "今年受浸", "新人主日", "福音出訪", "出訪比例", "家聚會出訪", "家聚會受訪", "家聚會加總", "家聚會比例", "大專主日", "青職主日", "青職佔比", "青職家聚", "青職家聚比例", "兒童召會生活", "青少年主日", "福音", "生命讀經", "晨興", "小排"],
+    "pending": ["總帳號與完整授權範圍", "各大組年度基數", "新人與年齡身分定義", "兒童召會生活去重口徑", "福音欄位與原網站聚會對應", "青職比例分母與各比例顯示精度"]
+  }
+}
