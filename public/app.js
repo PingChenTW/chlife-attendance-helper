@@ -1,4 +1,4 @@
-import { changesFor, mergeDesired, allDesiredConfirmed } from './model.js';
+import { changesFor, mergeDesired, allDesiredConfirmed, districtScopes } from './model.js';
 import { createPracticeApi } from './practice.js';
 import { selectionKey, readSelected, saveSelected, selectedMembers } from './selection.js';
 
@@ -180,8 +180,9 @@ async function start() {
   notice('');
   try {
     const meta = await api('/api/meta');
+    meta.scopes = districtScopes(meta.scopes);
     if (!meta.scopes?.length || !meta.meetings?.length || !meta.weeks?.length) throw new Error('尚未取得可用的小區與聚會，請稍後再試。');
-    state.meta = meta; state.query = { week: meta.weeks[0].key, scope: meta.scopes.find(s => s.level === 3)?.key ?? meta.scopes[0].key, meeting: meta.meetings[0].key };
+    state.meta = meta; state.query = { week: meta.weeks[0].key, scope: meta.scopes[0].key, meeting: meta.meetings[0].key };
     loadSelection();
     $('group-label').textContent = meta.group;
     $('mode-banner').hidden = meta.mode !== 'demo' && meta.writesEnabled;
@@ -192,7 +193,7 @@ async function start() {
       const dates = document.createElement('small'); dates.textContent = `${prettyDate(week.start)}～${prettyDate(week.end)}`;
       button.append(title, dates); button.onclick = () => changeScope('week', week.key); return button;
     }));
-    $('scope-select').replaceChildren(...meta.scopes.map(scope => { const option = document.createElement('option'); option.value = scope.key; option.textContent = scope.level === 4 ? '　' + scope.path.split(' / ').slice(-2).join(' / ') : scope.label; return option; }));
+    $('scope-select').replaceChildren(...meta.scopes.map(scope => { const option = document.createElement('option'); option.value = scope.key; option.textContent = scope.label; return option; }));
     $('meeting-select').replaceChildren(...meta.meetings.map(meeting => { const option = document.createElement('option'); option.value = meeting.key; option.textContent = meeting.label; return option; }));
     await loadRoster();
   } catch (error) { notice(error.message, true, true); $('members').replaceChildren(); $('empty-state').hidden = false; $('empty-state').textContent = '暫時無法讀取，請稍後再試。'; }

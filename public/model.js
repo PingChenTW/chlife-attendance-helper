@@ -1,3 +1,6 @@
+export function districtScopes(scopes = []) {
+  return scopes.filter(scope => Number(scope.level) === 3);
+}
 export function changesFor(roster, drafts) {
   return roster.members.filter(m => drafts.has(m.id) && drafts.get(m.id) !== m.attended && m.writable)
     .map(m => ({ memberId: m.id, attended: drafts.get(m.id) }));
