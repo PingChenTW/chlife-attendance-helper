@@ -34,7 +34,7 @@ export class ReportService {
     ensure(source,403,'REPORT_SOURCE','無法使用這個資料來源，請重新選擇。');
     const meta = await source.adapter.metadata(week);
     // Only fully granted level-3 nodes qualify. A grant to one level-4 group never grants its entire parent district.
-    const scopes = meta.scopes.filter(s => s.level === 3 && Number.isSafeInteger(s.ids?.[2]) && Number.isSafeInteger(s.ids?.[3]));
+    const scopes = meta.scopes.filter(s => s.level === 3 && s.ids?.[1] === source.adapter.churchId && Number.isSafeInteger(s.ids?.[2]) && Number.isSafeInteger(s.ids?.[3]));
     const groups = [...new Map(scopes.map(s => [`l2:${s.ids[2]}`, { key: `l2:${s.ids[2]}`, label: s.path.split(' / ')[0] }])).values()];
     const group = groups.find(g => g.key === (query.group || groups[0]?.key));
     ensure(group,403,'REPORT_GROUP','這個來源目前沒有可讀取完整小區報表的權限。');
