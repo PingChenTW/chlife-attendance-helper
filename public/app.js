@@ -64,7 +64,7 @@ function renderRoster() {
   const present = visible.filter(m => state.drafts.has(m.id) ? state.drafts.get(m.id) : m.attended).length;
   $('member-count').textContent = `已加入 ${visible.length} 人 · 出席 ${present} 人`;
   $('empty-state').hidden = visible.length > 0;
-  $('empty-state').textContent = state.query.audience === 'children' && !state.roster.members.length ? '這個小區目前沒有符合原網站兒童身分的名單。' : state.selected.size ? '已加入的人員目前不在這份名單中，請按「加入人名」重新選擇。' : state.query.audience === 'children' ? '兒童名單還沒有加入人名。\n請按上方「＋ 加入人名」。' : '還沒有加入人名。\n請按上方「＋ 加入人名」。';
+  $('empty-state').textContent = state.query.audience === 'children' && !state.roster.members.length ? '這個小區目前沒有符合原網站兒童身分的名單。' : state.selected.size ? '已加入的人員目前不在這份名單中，請按「名單編輯」重新選擇。' : state.query.audience === 'children' ? '兒童名單還沒有加入人名。\n請按上方「名單編輯」。' : '還沒有加入人名。\n請按上方「名單編輯」。';
   const fragment = document.createDocumentFragment();
   for (const member of visible) {
     const attended = state.drafts.has(member.id) ? state.drafts.get(member.id) : member.attended;
