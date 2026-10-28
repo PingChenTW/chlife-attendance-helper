@@ -112,4 +112,33 @@ export class ChlifeAdapter {
     await this.request('/attendance', { method: 'POST', write: true, idempotencyKey,
       body: { year: week.year, week: week.week, meeting_id: meeting.id, member_ids: memberIds, attend: attended } });
   }
+  async reportCounts(week, scopes, meta) {
+    const generalKeys = ['sunday','gospel','home-in','home-out','reading','group'];
+    const childKeys = ['children-sunday','children-group'];
+    const general = generalKeys.map(key => meta.meetings.find(m=>m.key===key));
+    const children = childKeys.map(key => (meta.childMeetings ?? []).find(m=>m.key===key));
+    ensure([...general,...children].every(Boolean),502,'REPORT_MEETINGS','原網站報表聚會欄位無法確認。');
+    const read = async (meetings, audience, role) => {
+      const params = new URLSearchParams({ year:String(week.year),week:String(week.week),scope:'church',scope_id:String(this.churchId),church_level:'3',row_contract:'2',direct_rows:'1',split_children_sunday:'0',
+        lv2_ids:[...new Set(scopes.map(s=>s.ids[2]))].join(','),lv3_ids:scopes.map(s=>s.ids[3]).join(','),meetings:meetings.map(m=>m.id).join(',') });
+      if (audience !== 'all') params.set('audience',audience);
+      if (role) params.set('role',role);
+      const data = await this.request('/admin/reports/weekly?' + params);
+      ensure(Array.isArray(data?.rows) && Array.isArray(data.meetings) && meetings.every(m=>data.meetings.some(column=>Number(column.id)===m.id)),502,'REPORT_SCHEMA','原網站報表欄位已變更，請聯絡管理者。');
+      return scopes.map(scope => {
+        const matches = data.rows.filter(row=>Number(row.node_id)===scope.ids[3] && !['direct','direct_lv2','ended_bucket'].includes(row.row_kind) && !row.node_deleted);
+        ensure(matches.length===1 && matches[0].attendance && typeof matches[0].attendance==='object',502,'REPORT_INCOMPLETE','原網站報表小區資料不完整，請重新讀取。');
+        return Object.fromEntries(meetings.map(m => {
+          const value = matches[0].attendance[String(m.id)];
+          ensure(value === null || (Number.isSafeInteger(value) && value >= 0),502,'REPORT_SCHEMA','原網站報表人數格式已變更，請重新讀取。');
+          return [m.key,value];
+        }));
+      });
+    };
+    // General official figures exclude unbaptized children. Child figures include both baptism statuses.
+    const adult = await read(general,'adult');
+    const preschool = await read(children,'all','學齡前');
+    const elementary = await read(children,'all','國小');
+    return scopes.map((scope,i)=>({ scope:scope.key,...adult[i],...Object.fromEntries(childKeys.map(key=>[key,preschool[i][key]===null || elementary[i][key]===null ? null : preschool[i][key]+elementary[i][key]])) }));
+  }
 }

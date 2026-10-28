@@ -1,6 +1,7 @@
 import { MEETINGS, CHILD_MEETINGS } from './scopes.mjs';
 export class DemoAdapter {
   mode = 'demo';
+  churchId = 0;
   writeCount = 0;
   readOnlyIds = new Set();
   values = new Map();
@@ -8,9 +9,9 @@ export class DemoAdapter {
     return {
       church: '一起點名 · 示範名單', group: '示範大組',
       scopes: [
-        { key: 'l3:611', label: '611區', path: '示範大組 / 611區', level: 3 },
+        { key: 'l3:611', label: '611區', path: '示範大組 / 611區', level: 3, ids: { 1: 0, 2: 1, 3: 611 } },
         { key: 'l4:6111', label: '社區一排', path: '示範大組 / 611區 / 社區一排', level: 4 },
-        { key: 'l3:612', label: '612區', path: '示範大組 / 612區', level: 3 }
+        { key: 'l3:612', label: '612區', path: '示範大組 / 612區', level: 3, ids: { 1: 0, 2: 1, 3: 612 } }
       ],
       meetings: MEETINGS.map(([key, label], i) => ({ key, label, id: i + 1 })),
       childMeetings: CHILD_MEETINGS.map(([key, label], i) => ({ key, label, id: i === 0 ? 1 : 101 + i }))
@@ -29,5 +30,14 @@ export class DemoAdapter {
     this.writeCount++;
     for (const id of memberIds) this.values.set(`${week.key}:${meeting.id}:${id}`, attended);
     if (this.afterWriteError) throw new Error('Simulated timeout after commit');
+  }
+  async reportCounts(week, scopes, meta) {
+    const rows = [];
+    for (const scope of scopes) {
+      const row = { scope:scope.key };
+      for (const meeting of [...meta.meetings,...meta.childMeetings]) row[meeting.key] = (await this.roster(week,scope,meeting,meeting.key.startsWith('children-')?'children':'all')).filter(m=>m.attended).length;
+      rows.push(row);
+    }
+    return rows;
   }
 }

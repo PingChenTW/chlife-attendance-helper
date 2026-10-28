@@ -6,10 +6,11 @@ import { AppError, ensure } from './errors.mjs';
 import { AttendanceService } from './service.mjs';
 import { DemoAdapter } from './demo.mjs';
 import { ChlifeAdapter } from './upstream.mjs';
+import { ReportService, configuredReportSources } from './reports.mjs';
 
 const PUBLIC = path.resolve(fileURLToPath(new URL('../public/', import.meta.url)));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
-export function createApp({ service, allowedOrigins = [], apiBase = '' }) {
+export function createApp({ service, reports = new ReportService(configuredReportSources(service.adapter)), allowedOrigins = [], apiBase = '' }) {
   const limits = new Map();
   const connectOrigin = apiBase ? new URL(apiBase).origin : '';
   return http.createServer(async (req, res) => {
@@ -40,6 +41,10 @@ export function createApp({ service, allowedOrigins = [], apiBase = '' }) {
         counter[kind]++; limits.set(key, counter);
         if (counter[kind] > (kind === 'write' ? 15 : 120)) { res.setHeader('Retry-After', String(Math.ceil((counter.reset - now) / 1000))); throw new AppError(429, 'RATE_LIMIT', '操作較頻繁，請稍後再試。'); }
         if (url.pathname === '/api/meta' && req.method === 'GET') { json(200, await service.metadata()); return; }
+        if (url.pathname === '/api/reports/meta' && req.method === 'GET') { json(200,reports.metadata()); return; }
+        if (url.pathname === '/api/reports/weekly' && req.method === 'GET') {
+          json(200,await reports.weekly({ week:url.searchParams.get('week'),source:url.searchParams.get('source') ?? 'primary',group:url.searchParams.get('group') })); return;
+        }
         if (url.pathname === '/api/roster' && req.method === 'GET') {
           json(200, await service.roster({ week: url.searchParams.get('week'), scope: url.searchParams.get('scope'), meeting: url.searchParams.get('meeting'), audience: url.searchParams.get('audience') ?? 'all' })); return;
         }
@@ -76,7 +81,8 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   ensure(['live', 'demo'].includes(mode), 500, 'CONFIG', 'APP_MODE must be live or demo');
   const adapter = mode === 'demo' ? new DemoAdapter() : new ChlifeAdapter({ churchId: Number(process.env.CHLIFE_CHURCH_ID), account: process.env.CHLIFE_ACCOUNT, password: process.env.CHLIFE_PASSWORD, deviceToken: process.env.CHLIFE_DEVICE_TOKEN });
   const service = new AttendanceService(adapter, { allowWrites: mode === 'demo' || process.env.ALLOW_WRITES === 'true', ...(process.env.SNAPSHOT_SECRET ? { secret: process.env.SNAPSHOT_SECRET } : {}) });
-  const server = createApp({ service, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean) });
+  const reports = new ReportService(configuredReportSources(adapter,process.env.REPORT_ACCOUNTS_JSON));
+  const server = createApp({ service, reports, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean) });
   server.requestTimeout = 60000; server.headersTimeout = 15000;
   const port = Number(process.env.PORT ?? 4173), host = process.env.HOST ?? '127.0.0.1';
   server.listen(port, host, () => console.log(`Attendance helper: http://${host}:${port} (${mode}, writes ${service.allowWrites ? 'enabled' : 'disabled'})`));
