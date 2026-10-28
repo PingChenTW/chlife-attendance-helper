@@ -1,6 +1,6 @@
 // Only member IDs are stored on this device; names and attendance stay in memory.
-export function selectionKey(meta, scope) {
-  return 'attendance-selected:v1:' + [meta.mode, meta.church, scope].map(encodeURIComponent).join(':');
+export function selectionKey(meta, scope, audience = 'all') {
+  return 'attendance-selected:v1:' + [meta.mode, meta.church, scope].map(encodeURIComponent).join(':') + (audience === 'children' ? ':children' : '');
 }
 export function readSelected(storage, key) {
   try {

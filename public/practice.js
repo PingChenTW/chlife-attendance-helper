@@ -18,16 +18,16 @@ export function createPracticeApi() {
     return { ...query, snapshot: 'practice', loadedAt: new Date().toISOString(), members: names.map((name, i) => {
       const id = Number(query.scope) * 100 + i, key = `${query.week}:${query.meeting}:${id}`;
       return { id, name, group: scopes.find(s => s.key === query.scope)?.label ?? '示範小區', writable: true, attended: values.has(key) ? values.get(key) : i % 4 === 1 };
-    }) };
+    }).filter((member, i) => query.audience !== 'children' || i % 3 === 0) };
   }
   return async (path, options = {}) => {
-    if (path === '/api/meta') return { church: '示範召會', group: '示範大組', mode: 'demo', writesEnabled: true, scopes, meetings, weeks: weeks() };
+    if (path === '/api/meta') return { church: '示範召會', group: '示範大組', mode: 'demo', writesEnabled: true, supportsChildren: true, scopes, meetings, weeks: weeks() };
     if (path.startsWith('/api/roster?')) return roster(Object.fromEntries(new URLSearchParams(path.split('?')[1])));
     if (path === '/api/attendance') {
       const input = JSON.parse(options.body);
       for (const change of input.changes) values.set(`${input.week}:${input.meeting}:${change.memberId}`, change.attended);
       return { status: 'confirmed', confirmed: input.changes.length, total: input.changes.length,
-        message: '練習完成！這些是示範資料，不會寫入原網站。', roster: roster({ week: input.week, scope: input.scope, meeting: input.meeting }) };
+        message: '練習完成！這些是示範資料，不會寫入原網站。', roster: roster({ week: input.week, scope: input.scope, meeting: input.meeting, audience: input.audience }) };
     }
     throw new Error('找不到此練習功能。');
   };

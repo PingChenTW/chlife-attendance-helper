@@ -20,15 +20,18 @@ async function api(path, options = {}) {
   let data;
   try { data = await response.json(); } catch { throw new Error('點名服務可能正在啟動，請稍候約一分鐘，再按「重新讀取」。'); }
   if (!response.ok) throw new Error(data.error?.message ?? '暫時無法完成，請稍後再試。');
+  if (path.startsWith('/api/roster?') && new URLSearchParams(path.split('?')[1]).get('audience') === 'children' && data.audience !== 'children') throw new Error('兒童名單服務正在更新，請稍後重新讀取。');
   return data;
 }
 const prettyDate = date => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
 function currentWeek() { return state.meta.weeks.find(w => w.key === state.query.week); }
 function phoneStorage() { try { return window.localStorage; } catch { return null; } }
-function loadSelection() { state.selected = readSelected(phoneStorage(), selectionKey(state.meta, state.query.scope)); }
+function loadSelection() { state.selected = readSelected(phoneStorage(), selectionKey(state.meta, state.query.scope, state.query.audience)); }
 function renderControls() {
   $('scope-select').value = state.query.scope; $('meeting-select').value = state.query.meeting;
   $('scope-select').disabled = state.busy || state.loading; $('meeting-select').disabled = state.busy || state.loading;
+  $('children-only').checked = state.query.audience === 'children';
+  $('children-only').disabled = state.busy || state.loading || !state.meta.supportsChildren;
   for (const button of $('week-switch').children) {
     button.setAttribute('aria-pressed', String(button.dataset.week === state.query.week)); button.disabled = state.busy || state.loading;
   }
@@ -52,12 +55,12 @@ function renderRoster() {
   if (!state.roster) { $('empty-state').hidden = false; $('empty-state').textContent = '尚未取得名單，請按「重新讀取」。'; return; }
   const meeting = state.meta.meetings.find(m => m.key === state.query.meeting);
   const scope = state.meta.scopes.find(s => s.key === state.query.scope);
-  $('roster-title').textContent = `${scope.label} · ${meeting.label}`;
+  $('roster-title').textContent = `${scope.label}${state.query.audience === 'children' ? ' · 兒童' : ''} · ${meeting.label}`;
   const visible = selectedMembers(state.roster, state.selected);
   const present = visible.filter(m => state.drafts.has(m.id) ? state.drafts.get(m.id) : m.attended).length;
   $('member-count').textContent = `已加入 ${visible.length} 人 · 出席 ${present} 人`;
   $('empty-state').hidden = visible.length > 0;
-  $('empty-state').textContent = state.selected.size ? '已加入的人員目前不在這份名單中，請按「加入人名」重新選擇。' : '還沒有加入人名。\n請按上方「＋ 加入人名」。';
+  $('empty-state').textContent = state.query.audience === 'children' && !state.roster.members.length ? '這個小區目前沒有符合原網站兒童身分的名單。' : state.selected.size ? '已加入的人員目前不在這份名單中，請按「加入人名」重新選擇。' : state.query.audience === 'children' ? '兒童名單還沒有加入人名。\n請按上方「＋ 加入人名」。' : '還沒有加入人名。\n請按上方「＋ 加入人名」。';
   const fragment = document.createDocumentFragment();
   for (const member of visible) {
     const attended = state.drafts.has(member.id) ? state.drafts.get(member.id) : member.attended;
@@ -90,7 +93,7 @@ function renderAddPeople() {
   const results = $('add-results'), previousScroll = results.scrollTop;
   const query = state.addSearch.toLocaleLowerCase();
   const members = addPeopleMembers(state.roster, state.selected, query, state.addShowAll);
-  $('add-result-count').textContent = query ? `找到 ${members.length} 人` : state.addShowAll ? `這個小區共 ${members.length} 人` : '目前已加入的人員';
+  $('add-result-count').textContent = query ? `找到 ${members.length} 人` : state.addShowAll ? `這個小區共 ${members.length} ${state.query.audience === 'children' ? '位兒童' : '人'}` : '目前已加入的人員';
   $('add-count').textContent = `已加入 ${selectedMembers(state.roster, state.selected).length} 人`;
   results.replaceChildren();
   if (!members.length) {
@@ -114,7 +117,7 @@ function renderAddPeople() {
       if (selected && state.drafts.has(member.id) && !window.confirm('這個人的點名尚未送出。要放棄修改，並從這支手機的名單移除嗎？')) return;
       if (selected) { state.selected.delete(member.id); state.drafts.delete(member.id); }
       else state.selected.add(member.id);
-      const saved = saveSelected(phoneStorage(), selectionKey(state.meta, state.query.scope), state.selected);
+      const saved = saveSelected(phoneStorage(), selectionKey(state.meta, state.query.scope, state.query.audience), state.selected);
       $('add-message').textContent = saved ? (selected ? '已從這支手機的名單移除。' : '已加入，並保存在這支手機。') : '這個瀏覽器目前無法保存名單，關閉後可能需要重新加入。';
       $('add-message').classList.toggle('storage-error', !saved);
       renderRoster(); renderAddPeople();
@@ -126,7 +129,7 @@ function renderAddPeople() {
 function openAddPeople() {
   if (!state.roster || state.busy || state.loading) return;
   state.addSearch = ''; state.addShowAll = false; $('add-search').value = ''; $('add-show-all').checked = false; $('add-message').textContent = ''; $('add-results').scrollTop = 0;
-  $('add-scope').textContent = `從「${state.meta.scopes.find(s => s.key === state.query.scope).label}」選人。這份自選名單只保存在這支手機。`;
+  $('add-scope').textContent = `從「${state.meta.scopes.find(s => s.key === state.query.scope).label}${state.query.audience === 'children' ? ' · 兒童名單' : ''}」選人。這份自選名單只保存在這支手機。`;
   renderAddPeople(); $('add-dialog').showModal();
 }
 async function loadRoster({ preserve = false } = {}) {
@@ -145,14 +148,14 @@ async function loadRoster({ preserve = false } = {}) {
 async function changeScope(field, value) {
   if (state.drafts.size && !window.confirm('還有點名尚未送出。要放棄這些修改，切換範圍嗎？')) { renderControls(); return; }
   state.query[field] = value;
-  if (field === 'scope') loadSelection();
+  if (field === 'scope' || field === 'audience') loadSelection();
   await loadRoster();
 }
 async function submit() {
   const changes = changesFor(state.roster, state.drafts);
   if (!changes.length || state.busy) return;
   const week = currentWeek(), scope = state.meta.scopes.find(s => s.key === state.query.scope), meeting = state.meta.meetings.find(m => m.key === state.query.meeting);
-  $('confirm-scope').textContent = `${scope.path}\n${week.label} ${prettyDate(week.start)}～${prettyDate(week.end)}\n${meeting.label}`;
+  $('confirm-scope').textContent = `${scope.path}${state.query.audience === 'children' ? '\n兒童名單' : ''}\n${week.label} ${prettyDate(week.start)}～${prettyDate(week.end)}\n${meeting.label}`;
   $('confirm-detail').textContent = `新增出席 ${changes.filter(c => c.attended).length} 人\n取消出席 ${changes.filter(c => !c.attended).length} 人`;
   const dialog = $('confirm-dialog'); dialog.returnValue = ''; dialog.showModal();
   const answer = await new Promise(resolve => dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true }));
@@ -183,7 +186,7 @@ async function start() {
     const meta = await api('/api/meta');
     meta.scopes = districtScopes(meta.scopes);
     if (!meta.scopes?.length || !meta.meetings?.length || !meta.weeks?.length) throw new Error('尚未取得可用的小區與聚會，請稍後再試。');
-    state.meta = meta; state.query = { week: meta.weeks[0].key, scope: meta.scopes[0].key, meeting: meta.meetings[0].key };
+    state.meta = meta; state.query = { week: meta.weeks[0].key, scope: meta.scopes[0].key, meeting: meta.meetings[0].key, audience: 'all' };
     loadSelection();
     $('group-label').textContent = meta.group;
     $('mode-banner').hidden = meta.mode !== 'demo' && meta.writesEnabled;
@@ -201,6 +204,7 @@ async function start() {
 }
 function connection() { $('connection').textContent = navigator.onLine ? '已連網' : '未連網'; $('connection').classList.toggle('offline', !navigator.onLine); renderRoster(); }
 $('scope-select').onchange = e => changeScope('scope', e.target.value);
+$('children-only').onchange = e => changeScope('audience', e.target.checked ? 'children' : 'all');
 $('meeting-select').onchange = e => changeScope('meeting', e.target.value);
 $('refresh-button').onclick = () => loadRoster({ preserve: true });
 $('add-button').onclick = openAddPeople;
