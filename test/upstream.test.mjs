@@ -8,6 +8,7 @@ test('adapter restricts scope and sends explicit attendance with idempotency, wi
     calls.push({ url, options });
     let data;
     if (url.endsWith('/auth/login')) data = { access_token: 'opaque-test-token', user: { church_id: 49, privileges: [{ church_id: 100, level: 2 }] } };
+    else if (url.endsWith('/members') && JSON.parse(options.body).role?.includes(',')) data = { count: 0, meetingIds: [37], members: [] };
     else if (url.endsWith('/members')) data = { count: 2, meetingIds: [37], members: [
       { member_id: 1, member_name: '測試甲', path: '49,100,200,0', church_name: '測試小區', attend0: 1, in_scope: 1, roll_callable: 1, phone: 'private-not-for-frontend' },
       { member_id: 2, member_name: '其他區資料', path: '49,101,201,0', attend0: 0, in_scope: 0, roll_callable: 0 }
@@ -20,9 +21,11 @@ test('adapter restricts scope and sends explicit attendance with idempotency, wi
   assert.equal(roster.length, 1); assert.equal(roster[0].attended, true);
   assert.equal('phone' in roster[0], false); assert.equal('path' in roster[0], false);
   assert.equal('role' in JSON.parse(calls.at(-1).options.body), false);
-  await adapter.roster(week, scope, meeting, 'children');
+  const childRoster = await adapter.roster(week, scope, meeting, 'children');
+  assert.equal(childRoster.length, 1);
+  assert.deepEqual(calls.filter(call => call.url.endsWith('/members')).map(call => JSON.parse(call.options.body).role).slice(-2), ['學齡前', '國小']);
   const childFilter = JSON.parse(calls.at(-1).options.body);
-  assert.equal(childFilter.role, '學齡前,國小');
+  assert.equal(childFilter.role, '國小');
   assert.equal(childFilter.lv2_ids, '100'); assert.equal(childFilter.lv3_ids, '200');
   await adapter.setAttendance(week, meeting, [1], false, 'test-operation-id');
   const request = calls.at(-1);
