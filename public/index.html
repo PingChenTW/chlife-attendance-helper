@@ -39,7 +39,7 @@
   </div>
   <dialog id="add-dialog" class="add-screen" aria-labelledby="add-title">
     <div class="add-header"><h2 id="add-title">加入人名</h2><button id="add-close" class="secondary-button" type="button">返回點名</button></div>
-    <div class="add-search-area"><p id="add-scope" class="add-scope"></p><label class="field-label" for="add-search">搜尋姓名</label><input id="add-search" type="search" placeholder="輸入姓名" autocomplete="off"><p class="add-help">點姓名即可加入，再點一次可移除。</p><p id="add-message" role="status" aria-live="polite"></p></div>
+    <div class="add-search-area"><p id="add-scope" class="add-scope"></p><label class="field-label" for="add-search">搜尋姓名</label><input id="add-search" type="search" placeholder="輸入姓名" autocomplete="off"><label class="show-all-option" for="add-show-all"><input id="add-show-all" type="checkbox" aria-controls="add-results"><span>顯示全部名單</span></label><p class="add-help">點姓名即可加入，再點一次可移除。</p><p id="add-message" role="status" aria-live="polite"></p><p id="add-result-count" class="add-result-count" role="status" aria-live="polite"></p></div>
     <div id="add-results" class="add-results"></div>
     <div class="add-footer"><strong id="add-count">已加入 0 人</strong><button id="add-done" class="primary-button" type="button">完成，回點名</button></div>
   </dialog>

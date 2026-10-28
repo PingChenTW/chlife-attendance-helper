@@ -1,9 +1,9 @@
 import { changesFor, mergeDesired, allDesiredConfirmed, districtScopes } from './model.js';
 import { createPracticeApi } from './practice.js';
-import { selectionKey, readSelected, saveSelected, selectedMembers } from './selection.js';
+import { selectionKey, readSelected, saveSelected, selectedMembers, addPeopleMembers } from './selection.js';
 
 const $ = id => document.getElementById(id);
-const state = { meta: null, query: null, roster: null, drafts: new Map(), selected: new Set(), busy: false, loading: false, seq: 0, addSearch: '', lastSaved: false };
+const state = { meta: null, query: null, roster: null, drafts: new Map(), selected: new Set(), busy: false, loading: false, seq: 0, addSearch: '', addShowAll: false, lastSaved: false };
 const base = String(window.ATTENDANCE_CONFIG?.apiBase ?? '').replace(/\/$/, '');
 const practice = window.ATTENDANCE_CONFIG?.practice ? createPracticeApi() : null;
 function notice(message, error = false, retry = false) {
@@ -89,12 +89,13 @@ function renderRoster() {
 function renderAddPeople() {
   const results = $('add-results'), previousScroll = results.scrollTop;
   const query = state.addSearch.toLocaleLowerCase();
-  const members = query ? state.roster.members.filter(m => m.name.toLocaleLowerCase().includes(query)) : selectedMembers(state.roster, state.selected);
+  const members = addPeopleMembers(state.roster, state.selected, query, state.addShowAll);
+  $('add-result-count').textContent = query ? `找到 ${members.length} 人` : state.addShowAll ? `這個小區共 ${members.length} 人` : '目前已加入的人員';
   $('add-count').textContent = `已加入 ${selectedMembers(state.roster, state.selected).length} 人`;
   results.replaceChildren();
   if (!members.length) {
     const empty = document.createElement('p'); empty.className = 'empty-state';
-    empty.textContent = query ? '這個小區找不到此姓名，請換個字搜尋。' : '請在上方輸入姓名，搜尋要加入的人。';
+    empty.textContent = query ? '這個小區找不到此姓名，請換個字搜尋。' : state.addShowAll ? '這個小區目前沒有可加入的人員。' : '請搜尋姓名，或勾選「顯示全部名單」來選人。';
     results.append(empty); return;
   }
   for (const member of members) {
@@ -124,8 +125,8 @@ function renderAddPeople() {
 }
 function openAddPeople() {
   if (!state.roster || state.busy || state.loading) return;
-  state.addSearch = ''; $('add-search').value = ''; $('add-message').textContent = '';
-  $('add-scope').textContent = `在「${state.meta.scopes.find(s => s.key === state.query.scope).label}」搜尋。這份自選名單只保存在這支手機。`;
+  state.addSearch = ''; state.addShowAll = false; $('add-search').value = ''; $('add-show-all').checked = false; $('add-message').textContent = ''; $('add-results').scrollTop = 0;
+  $('add-scope').textContent = `從「${state.meta.scopes.find(s => s.key === state.query.scope).label}」選人。這份自選名單只保存在這支手機。`;
   renderAddPeople(); $('add-dialog').showModal();
 }
 async function loadRoster({ preserve = false } = {}) {
@@ -203,7 +204,8 @@ $('scope-select').onchange = e => changeScope('scope', e.target.value);
 $('meeting-select').onchange = e => changeScope('meeting', e.target.value);
 $('refresh-button').onclick = () => loadRoster({ preserve: true });
 $('add-button').onclick = openAddPeople;
-$('add-search').oninput = e => { state.addSearch = e.target.value.trim(); renderAddPeople(); };
+$('add-search').oninput = e => { state.addSearch = e.target.value.trim(); $('add-results').scrollTop = 0; renderAddPeople(); };
+$('add-show-all').onchange = e => { state.addShowAll = e.target.checked; $('add-results').scrollTop = 0; renderAddPeople(); };
 $('add-close').onclick = () => $('add-dialog').close();
 $('add-done').onclick = () => $('add-dialog').close();
 $('submit-button').onclick = submit;

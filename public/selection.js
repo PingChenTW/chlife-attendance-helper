@@ -19,3 +19,9 @@ export function selectedMembers(roster, selected) {
   const byId = new Map((roster?.members ?? []).map(member => [member.id, member]));
   return [...selected].map(id => byId.get(id)).filter(Boolean);
 }
+export function addPeopleMembers(roster, selected, search = '', showAll = false) {
+  const query = search.trim().toLocaleLowerCase();
+  const members = roster?.members ?? [];
+  if (query) return members.filter(member => member.name.toLocaleLowerCase().includes(query));
+  return showAll ? members : selectedMembers(roster, selected);
+}
