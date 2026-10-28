@@ -29,8 +29,8 @@
       </section>
       <section class="roster-section" aria-labelledby="roster-title">
         <div class="roster-heading"><div><div class="section-kicker"><span class="step-number">2</span> 點姓名，勾選出席</div><h2 id="roster-title">準備名單中</h2></div><button class="icon-button" id="refresh-button" disabled>重新讀取</button></div>
-        <p id="roster-caption" class="roster-caption">先按「名單編輯」選人，再點姓名並送出點名。</p>
-        <button id="add-button" class="add-button" type="button" disabled>名單編輯</button>
+        <p id="roster-caption" class="roster-caption">先按「加入名單」選人，再點姓名並送出點名。</p>
+        <button id="add-button" class="add-button" type="button" disabled>加入名單</button>
         <div class="list-meta"><span id="member-count">正在取得名單</span><span class="unsaved-hint" id="unsaved-hint" hidden>● 有待送出修改</span></div>
         <div id="members" class="members" aria-busy="true"><div class="empty-state">正在連接點名系統…</div></div>
         <div id="empty-state" class="empty-state" hidden></div>
@@ -40,7 +40,7 @@
     <footer class="submit-dock"><div class="dock-inner"><div class="dock-summary"><strong id="pending-count">尚未修改</strong><span id="pending-detail">選完姓名再送出</span></div><button id="submit-button" class="primary-button" disabled>送出點名</button></div></footer>
   </div>
   <dialog id="add-dialog" class="add-screen" aria-labelledby="add-title">
-    <div class="add-header"><h2 id="add-title">名單編輯</h2><button id="add-close" class="secondary-button" type="button">返回點名</button></div>
+    <div class="add-header"><h2 id="add-title">加入名單</h2><button id="add-close" class="secondary-button" type="button">返回點名</button></div>
     <div class="add-search-area"><p id="add-scope" class="add-scope"></p><label class="field-label" for="add-search">搜尋姓名</label><input id="add-search" type="search" placeholder="輸入姓名" autocomplete="off"><label class="show-all-option" for="add-show-all"><input id="add-show-all" type="checkbox" aria-controls="add-results"><span>顯示全部名單</span></label><p class="add-help">點姓名即可加入，再點一次可移除。</p><p id="add-message" role="status" aria-live="polite"></p><p id="add-result-count" class="add-result-count" role="status" aria-live="polite"></p></div>
     <div id="add-results" class="add-results"></div>
     <div class="add-footer"><strong id="add-count">已加入 0 人</strong><button id="add-done" class="primary-button" type="button">完成，回點名</button></div>
