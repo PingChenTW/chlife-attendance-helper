@@ -40,6 +40,11 @@ test('invalid registries fail closed; no credentials or missing group can select
   assert.equal(configuredGroups().size,0);
   for(const value of ['not-json','[]',JSON.stringify({...config,links:[{...config.links[0],source:'missing'}]}),JSON.stringify({...config,links:[config.links[0],config.links[0]]}),JSON.stringify({...config,links:[{...config.links[0],group:'9'}]})])assert.throws(()=>configuredGroups(value,{adapterFactory:fake}));
 });
+test('global read-only setting overrides per-group write permission',async()=>{
+  const groups=configuredGroups(JSON.stringify(config),{now,allowWrites:false,adapterFactory:fake});
+  assert.equal((await groups.get('7').service.metadata()).writesEnabled,false);
+  await assert.rejects(groups.get('7').service.submit({}),/尚未開放/);
+});
 test('HTTP prefixes dispatch to the isolated service, preserve legacy and deny other groups',async t=>{
   const primary=new AttendanceService(new DemoAdapter(),{now,allowWrites:true});
   const server=createApp({service:primary,groups:configuredGroups(JSON.stringify(config),{now,adapterFactory:fake})});

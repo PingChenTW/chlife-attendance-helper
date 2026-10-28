@@ -37,3 +37,7 @@ test('upstream MFA or forced account changes stop automation', async () => {
   const adapter = new ChlifeAdapter({ churchId: 49, account: 'test-owner', password: 'test-only-secret', fetchImpl: async () => new Response(JSON.stringify({ success: true, data: { totp_required: true } })) });
   await assert.rejects(adapter.authenticate(), /管理者完成驗證/);
 });
+test('original report rate limits retain a bounded retry interval instead of a generic failure',async()=>{
+  const a=new ChlifeAdapter({churchId:49,account:'fake',password:'fake',fetchImpl:async()=>new Response(JSON.stringify({success:false,error:'busy'}),{status:429,headers:{'Retry-After':'13'}})});
+  await assert.rejects(a.raw('/admin/reports/weekly'),e=>e.code==='UPSTREAM_RATE_LIMIT' && e.status===429 && e.retryAfter===13 && e.message.includes('13'));
+});

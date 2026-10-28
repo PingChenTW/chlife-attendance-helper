@@ -16,7 +16,7 @@ function adapter(churchId = 49) {
     childMeetings: [{ key: 'children-sunday', id: 1 }, { key: 'children-group', id: 8 }] };
   }, async reportCounts(week, scopes) { this.calls.push(scopes.map(s => s.key)); return scopes.map((s,i) => ({ scope: s.key, sunday: i ? 20 : 10, gospel: 2, 'home-in': 3, 'home-out': 4, reading: 5, group: 6, 'children-sunday': 7, 'children-group': 8 })); } };
 }
-const baselines = { primary: { 2026: { 49: { 200: 12, 201: 23 } } } };
+const baselines = { 2026: { 49: { 3: { 200: 12, 201: 23 } } } };
 test('dynamic groups, totals use ratios of sums, no fixed districts and no attendance writes', async () => {
   const a = adapter(), service = new ReportService([{ key: 'primary', label: '來源甲', adapter: a }], { now, baselines });
   const report = await service.weekly({ week: '2026-W44', source: 'primary', group: 'l2:100' });
@@ -29,10 +29,12 @@ test('dynamic groups, totals use ratios of sums, no fixed districts and no atten
   for (const query of [{ source: 'unknown' }, { group: 'l2:999' }, { week: '2026-W42' }]) await assert.rejects(service.weekly({ week: '2026-W44', source: 'primary', ...query }));
 });
 test('accounts with identical district IDs stay separate; credentials never leave registry', async () => {
-  const a = adapter(), b = adapter();
+  const a = adapter(), b = adapter(50);
   const service = new ReportService([{ key: 'primary', label: '甲', adapter: a }, { key: 'second', label: '乙', adapter: b }], { now, baselines });
   const result = await service.weekly({ week: '2026-W44', source: 'second', group: 'l2:100' });
   assert.equal(a.calls.length, 0); assert.equal(b.calls.length, 1); assert.equal(result.rows[0].baseline, null);
+  const sameChurch=new ReportService([{key:'another',label:'同召會另一帳號',adapter:adapter()}],{now,baselines});
+  assert.equal((await sameChurch.weekly({week:'2026-W44',source:'another',group:'l2:100'})).rows[0].baseline,12);
   assert.deepEqual(service.metadata().sources, [{ key: 'primary', label: '甲' }, { key: 'second', label: '乙' }]);
   assert.equal(JSON.stringify(service.metadata()).includes('adapter'), false);
   const sources = configuredReportSources(a, JSON.stringify([{ key: 'other', label: '新來源', churchId: 50, account: 'fake', password: 'test-secret' }]));
