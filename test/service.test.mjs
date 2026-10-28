@@ -72,3 +72,40 @@ test('live read-only switch blocks mutation', async () => {
   await assert.rejects(service.submit(input), /尚未開放/);
   assert.equal(adapter.writeCount, 0);
 });
+
+test('children roster is a subset, shares attendance records, and binds snapshots to its audience', async () => {
+  const { service, query, roster, adapter } = await setup();
+  const childQuery = { ...query, audience: 'children' };
+  const children = await service.roster(childQuery);
+  assert.equal(children.audience, 'children');
+  assert.ok(children.members.length > 0 && children.members.length < roster.members.length);
+  assert.ok(children.members.every(child => roster.members.some(member => member.id === child.id)));
+  const child = children.members[0];
+  const input = { ...childQuery, snapshot: children.snapshot, requestId: randomUUID(), changes: [{ memberId: child.id, attended: !child.attended }] };
+  await assert.rejects(service.submit({ ...input, audience: 'all' }), /名單與送出範圍/);
+  await assert.rejects(service.submit({ ...input, changes: [{ memberId: roster.members.find(member => !children.members.some(c => c.id === member.id)).id, attended: true }] }), /名單或權限/);
+  await assert.rejects(service.roster({ ...query, audience: 'adults' }), /名單種類/);
+  assert.equal(adapter.writeCount, 0);
+  const result = await service.submit(input);
+  assert.equal(result.status, 'confirmed');
+  assert.equal(result.roster.audience, 'children');
+  assert.equal((await service.roster(query)).members.find(member => member.id === child.id).attended, !child.attended);
+  assert.equal(adapter.writeCount, 1);
+});
+
+test('a person leaving the children roster cannot be marked through an old children snapshot', async () => {
+  const { service, query, adapter } = await setup();
+  const childQuery = { ...query, audience: 'children' }, children = await service.roster(childQuery);
+  const child = children.members[0], original = adapter.roster.bind(adapter);
+  adapter.roster = async (...args) => (await original(...args)).filter(member => args[3] !== 'children' || member.id !== child.id);
+  await assert.rejects(service.submit({ ...childQuery, snapshot: children.snapshot, requestId: randomUUID(), changes: [{ memberId: child.id, attended: true }] }), /名單或權限/);
+  assert.equal(adapter.writeCount, 0);
+});
+
+test('existing clients without an audience keep working with earlier all-member snapshots', async () => {
+  const { service, query, roster, input } = await setup();
+  const previous = service.verify(roster.snapshot); delete previous.audience;
+  const result = await service.submit({ ...input, snapshot: service.sign(previous) });
+  assert.equal(result.status, 'confirmed');
+  assert.equal((await service.roster(query)).audience, 'all');
+});

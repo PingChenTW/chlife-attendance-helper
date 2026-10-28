@@ -19,6 +19,11 @@ test('adapter restricts scope and sends explicit attendance with idempotency, wi
   const roster = await adapter.roster(week, scope, meeting);
   assert.equal(roster.length, 1); assert.equal(roster[0].attended, true);
   assert.equal('phone' in roster[0], false); assert.equal('path' in roster[0], false);
+  assert.equal('role' in JSON.parse(calls.at(-1).options.body), false);
+  await adapter.roster(week, scope, meeting, 'children');
+  const childFilter = JSON.parse(calls.at(-1).options.body);
+  assert.equal(childFilter.role, '學齡前,國小');
+  assert.equal(childFilter.lv2_ids, '100'); assert.equal(childFilter.lv3_ids, '200');
   await adapter.setAttendance(week, meeting, [1], false, 'test-operation-id');
   const request = calls.at(-1);
   assert.equal(request.options.headers['Idempotency-Key'], 'test-operation-id');

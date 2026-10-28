@@ -31,6 +31,11 @@ test('different phones, districts, practice and live data have separate selectio
   assert.equal(readSelected(b, key).size, 0);
   assert.equal(readSelected(a, selectionKey(meta, 'l3:612')).size, 0);
   assert.equal(readSelected(a, selectionKey({ ...meta, mode: 'demo' }, 'l3:611')).size, 0);
+  assert.equal(selectionKey(meta, 'l3:611', 'all'), key);
+  assert.equal(readSelected(a, selectionKey(meta, 'l3:611', 'children')).size, 0);
+  saveSelected(a, selectionKey(meta, 'l3:611', 'children'), new Set([2]));
+  assert.deepEqual([...readSelected(a, key)], [1]);
+  assert.deepEqual([...readSelected(a, selectionKey(meta, 'l3:611', 'children'))], [2]);
 });
 test('invalid storage cannot inject unknown names or force a false persistence claim', () => {
   const storage = phone(), key = selectionKey(meta, 'l3:611');

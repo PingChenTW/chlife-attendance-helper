@@ -34,4 +34,11 @@ test('static Pages practice works independently and keeps different meetings sep
   assert.equal(after.roster.members[0].attended, true);
   const another = await api('/api/roster?' + new URLSearchParams({ ...query, meeting: meta.meetings[1].key }));
   assert.equal(another.members[0].attended, false);
+  const childQuery = { ...query, audience: 'children' };
+  const children = await api('/api/roster?' + new URLSearchParams(childQuery));
+  assert.ok(children.members.length < before.members.length);
+  const savedChild = await api('/api/attendance', { body: JSON.stringify({ ...childQuery, changes: [{ memberId: children.members[0].id, attended: false }] }) });
+  assert.equal(savedChild.roster.audience, 'children');
+  assert.deepEqual(savedChild.roster.members.map(member => member.id), children.members.map(member => member.id));
+  assert.equal((await api('/api/roster?' + new URLSearchParams(query))).members[0].attended, false);
 });
