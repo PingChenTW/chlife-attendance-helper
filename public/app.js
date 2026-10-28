@@ -3,7 +3,7 @@ import { createPracticeApi } from './practice.js';
 import { selectionKey, readSelected, saveSelected, selectedMembers, addPeopleMembers } from './selection.js';
 
 const $ = id => document.getElementById(id);
-const state = { meta: null, query: null, roster: null, drafts: new Map(), selected: new Set(), busy: false, loading: false, seq: 0, addSearch: '', addShowAll: false, lastSaved: false };
+const state = { meta: null, query: null, roster: null, drafts: new Map(), selected: new Set(), busy: false, loading: false, seq: 0, addSearch: '', addShowAll: false, lastSaved: false, meetingByAudience: {} };
 const base = String(window.ATTENDANCE_CONFIG?.apiBase ?? '').replace(/\/$/, '');
 const practice = window.ATTENDANCE_CONFIG?.practice ? createPracticeApi() : null;
 function notice(message, error = false, retry = false) {
@@ -25,13 +25,17 @@ async function api(path, options = {}) {
 }
 const prettyDate = date => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
 function currentWeek() { return state.meta.weeks.find(w => w.key === state.query.week); }
+function availableMeetings() { return state.query.audience === 'children' ? state.meta.childMeetings ?? [] : state.meta.meetings; }
+function renderMeetingOptions() {
+  $('meeting-select').replaceChildren(...availableMeetings().map(meeting => { const option = document.createElement('option'); option.value = meeting.key; option.textContent = meeting.label; return option; }));
+}
 function phoneStorage() { try { return window.localStorage; } catch { return null; } }
 function loadSelection() { state.selected = readSelected(phoneStorage(), selectionKey(state.meta, state.query.scope, state.query.audience)); }
 function renderControls() {
   $('scope-select').value = state.query.scope; $('meeting-select').value = state.query.meeting;
   $('scope-select').disabled = state.busy || state.loading; $('meeting-select').disabled = state.busy || state.loading;
   $('children-only').checked = state.query.audience === 'children';
-  $('children-only').disabled = state.busy || state.loading || !state.meta.supportsChildren;
+  $('children-only').disabled = state.busy || state.loading || !state.meta.supportsChildren || state.meta.childMeetings?.length !== 3;
   for (const button of $('week-switch').children) {
     button.setAttribute('aria-pressed', String(button.dataset.week === state.query.week)); button.disabled = state.busy || state.loading;
   }
@@ -53,9 +57,9 @@ function renderRoster() {
   }
   list.replaceChildren();
   if (!state.roster) { $('empty-state').hidden = false; $('empty-state').textContent = '尚未取得名單，請按「重新讀取」。'; return; }
-  const meeting = state.meta.meetings.find(m => m.key === state.query.meeting);
+  const meeting = availableMeetings().find(m => m.key === state.query.meeting);
   const scope = state.meta.scopes.find(s => s.key === state.query.scope);
-  $('roster-title').textContent = `${scope.label}${state.query.audience === 'children' ? ' · 兒童' : ''} · ${meeting.label}`;
+  $('roster-title').textContent = `${scope.label} · ${meeting.label}`;
   const visible = selectedMembers(state.roster, state.selected);
   const present = visible.filter(m => state.drafts.has(m.id) ? state.drafts.get(m.id) : m.attended).length;
   $('member-count').textContent = `已加入 ${visible.length} 人 · 出席 ${present} 人`;
@@ -147,14 +151,19 @@ async function loadRoster({ preserve = false } = {}) {
 }
 async function changeScope(field, value) {
   if (state.drafts.size && !window.confirm('還有點名尚未送出。要放棄這些修改，切換範圍嗎？')) { renderControls(); return; }
+  if (field === 'audience') state.meetingByAudience[state.query.audience] = state.query.meeting;
   state.query[field] = value;
+  if (field === 'audience') {
+    state.query.meeting = state.meetingByAudience[value] ?? availableMeetings()[0].key;
+    renderMeetingOptions();
+  }
   if (field === 'scope' || field === 'audience') loadSelection();
   await loadRoster();
 }
 async function submit() {
   const changes = changesFor(state.roster, state.drafts);
   if (!changes.length || state.busy) return;
-  const week = currentWeek(), scope = state.meta.scopes.find(s => s.key === state.query.scope), meeting = state.meta.meetings.find(m => m.key === state.query.meeting);
+  const week = currentWeek(), scope = state.meta.scopes.find(s => s.key === state.query.scope), meeting = availableMeetings().find(m => m.key === state.query.meeting);
   $('confirm-scope').textContent = `${scope.path}${state.query.audience === 'children' ? '\n兒童名單' : ''}\n${week.label} ${prettyDate(week.start)}～${prettyDate(week.end)}\n${meeting.label}`;
   $('confirm-detail').textContent = `新增出席 ${changes.filter(c => c.attended).length} 人\n取消出席 ${changes.filter(c => !c.attended).length} 人`;
   const dialog = $('confirm-dialog'); dialog.returnValue = ''; dialog.showModal();
@@ -198,7 +207,7 @@ async function start() {
       button.append(title, dates); button.onclick = () => changeScope('week', week.key); return button;
     }));
     $('scope-select').replaceChildren(...meta.scopes.map(scope => { const option = document.createElement('option'); option.value = scope.key; option.textContent = scope.label; return option; }));
-    $('meeting-select').replaceChildren(...meta.meetings.map(meeting => { const option = document.createElement('option'); option.value = meeting.key; option.textContent = meeting.label; return option; }));
+    renderMeetingOptions();
     await loadRoster();
   } catch (error) { notice(error.message, true, true); $('members').replaceChildren(); $('empty-state').hidden = false; $('empty-state').textContent = '暫時無法讀取，請稍後再試。'; }
 }

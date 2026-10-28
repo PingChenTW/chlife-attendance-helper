@@ -13,19 +13,21 @@ export function createPracticeApi() {
   }
   const scopes = [{ key: '611', label: '611區', path: '示範大組 / 611區', level: 3 }, { key: '612', label: '612區', path: '示範大組 / 612區', level: 3 }];
   const meetings = [['sunday', '主日'], ['home-out', '家聚會出訪'], ['home-in', '家聚會受訪'], ['group', '排聚會'], ['prayer', '禱告聚會'], ['reading', '生命讀經'], ['gospel', '福音出訪']].map(([key, label]) => ({ key, label }));
+  const childMeetings = [['children-sunday', '兒童主日'], ['children-group', '兒童排'], ['children-home', '兒童家聚會']].map(([key, label]) => ({ key, label }));
+  const recordMeeting = meeting => meeting === 'children-sunday' ? 'sunday' : meeting;
   const names = ['示範陳弟兄', '示範林姊妹', '示範張弟兄', '示範黃姊妹', '示範吳弟兄', '示範劉姊妹', '示範蔡弟兄', '示範王姊妹'];
   function roster(query) {
     return { ...query, snapshot: 'practice', loadedAt: new Date().toISOString(), members: names.map((name, i) => {
-      const id = Number(query.scope) * 100 + i, key = `${query.week}:${query.meeting}:${id}`;
+      const id = Number(query.scope) * 100 + i, key = `${query.week}:${recordMeeting(query.meeting)}:${id}`;
       return { id, name, group: scopes.find(s => s.key === query.scope)?.label ?? '示範小區', writable: true, attended: values.has(key) ? values.get(key) : i % 4 === 1 };
     }).filter((member, i) => query.audience !== 'children' || i % 3 === 0) };
   }
   return async (path, options = {}) => {
-    if (path === '/api/meta') return { church: '示範召會', group: '示範大組', mode: 'demo', writesEnabled: true, supportsChildren: true, scopes, meetings, weeks: weeks() };
+    if (path === '/api/meta') return { church: '示範召會', group: '示範大組', mode: 'demo', writesEnabled: true, supportsChildren: true, scopes, meetings, childMeetings, weeks: weeks() };
     if (path.startsWith('/api/roster?')) return roster(Object.fromEntries(new URLSearchParams(path.split('?')[1])));
     if (path === '/api/attendance') {
       const input = JSON.parse(options.body);
-      for (const change of input.changes) values.set(`${input.week}:${input.meeting}:${change.memberId}`, change.attended);
+      for (const change of input.changes) values.set(`${input.week}:${recordMeeting(input.meeting)}:${change.memberId}`, change.attended);
       return { status: 'confirmed', confirmed: input.changes.length, total: input.changes.length,
         message: '練習完成！這些是示範資料，不會寫入原網站。', roster: roster({ week: input.week, scope: input.scope, meeting: input.meeting, audience: input.audience }) };
     }
