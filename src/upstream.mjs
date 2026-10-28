@@ -121,6 +121,7 @@ export class ChlifeAdapter {
     const read = async (meetings, audience, role) => {
       const params = new URLSearchParams({ year:String(week.year),week:String(week.week),scope:'church',scope_id:String(this.churchId),church_level:'3',row_contract:'2',direct_rows:'1',split_children_sunday:'0',
         lv2_ids:[...new Set(scopes.map(s=>s.ids[2]))].join(','),lv3_ids:scopes.map(s=>s.ids[3]).join(','),meetings:meetings.map(m=>m.id).join(',') });
+      params.set('split_children_sunday',role ? '0' : '1');
       if (audience !== 'all') params.set('audience',audience);
       if (role) params.set('role',role);
       const data = await this.request('/admin/reports/weekly?' + params);
@@ -138,8 +139,9 @@ export class ChlifeAdapter {
         }));
       });
     };
-    // General official figures exclude unbaptized children. Child figures include both baptism statuses.
-    const adult = await read(general,'adult');
+    // Match the original weekly report defaults (all audiences, Sunday split enabled).
+    // Its historical rollups can differ from an explicit audience=adult filter.
+    const adult = await read(general,'all');
     const preschool = await read(children,'all','學齡前');
     const elementary = await read(children,'all','國小');
     return scopes.map((scope,i)=>({ scope:scope.key,...adult[i],...Object.fromEntries(childKeys.map(key=>[key,preschool[i][key]===null || elementary[i][key]===null ? null : preschool[i][key]+elementary[i][key]])) }));
