@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { changesFor, mergeDesired, allDesiredConfirmed } from '../public/model.js';
+import { changesFor, mergeDesired, allDesiredConfirmed, districtScopes } from '../public/model.js';
 import { createPracticeApi } from '../public/practice.js';
+
+test('only districts are selectable, retaining order and the full district scope', () => {
+  const district = { key: 'l3:200', label: '611區', level: 3, ids: { 1: 49, 2: 100, 3: 200 } };
+  const next = { key: 'l3:201', label: '612區', level: '3' };
+  const scopes = [{ key: 'l2:100', level: 2 }, district, { key: 'l4:200', label: '一排', level: 4 }, next];
+  assert.deepEqual(districtScopes(scopes), [district, next]);
+  assert.deepEqual(districtScopes([{ level: 4 }]), []);
+  assert.deepEqual(districtScopes(), []);
+  assert.equal(scopes.length, 4);
+  assert.equal('4' in districtScopes(scopes)[0].ids, false);
+});
 
 test('partial readback keeps unsaved choices; removed records cannot become false success', () => {
   const roster = { members: [{ id: 1, attended: true, writable: true }, { id: 2, attended: false, writable: true }] };
