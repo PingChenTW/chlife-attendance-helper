@@ -50,7 +50,7 @@ test('missing values and missing yearly baselines never become zero or partial r
   a.reportCounts = async () => [];
   await assert.rejects(service.weekly({ week: '2026-W44' }), /不完整/);
 });
-test('upstream formal weekly reads adult and both child roles, filters unrelated rows and validates schema', async () => {
+test('upstream formal weekly uses official defaults and both child roles, filters unrelated rows and validates schema', async () => {
   const calls = [], a = new ChlifeAdapter({ churchId: 49, account: 'fake', password: 'fake' });
   const scopes = (await adapter().metadata()).scopes.slice(0,2);
   const meta = await adapter().metadata();
@@ -60,7 +60,9 @@ test('upstream formal weekly reads adult and both child roles, filters unrelated
   const rows = await a.reportCounts({ year: 2026, week: 44 },scopes,meta);
   assert.equal(rows.length, 2); assert.equal(rows[0].sunday, 2); assert.equal(rows[0]['children-sunday'], 4);
   assert.deepEqual(calls.map(u=>u.searchParams.get('role')), [null,'學齡前','國小']);
-  assert.equal(calls[0].searchParams.get('audience'),'adult');
+  assert.equal(calls[0].searchParams.get('audience'),null);
+  assert.equal(calls[0].searchParams.get('split_children_sunday'),'1');
+  assert.equal(calls[1].searchParams.get('split_children_sunday'),'0');
   for (const call of calls) { assert.equal(call.searchParams.get('lv3_ids'),'200,201'); assert.equal(call.searchParams.get('lv2_ids'),'100'); assert.equal(call.searchParams.get('row_contract'),'2'); }
   a.request = async () => ({ meetings: [], rows: [] });
   await assert.rejects(a.reportCounts({ year: 2026, week: 44 },scopes,meta), /欄位/);
