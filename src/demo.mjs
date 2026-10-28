@@ -15,14 +15,14 @@ export class DemoAdapter {
       meetings: MEETINGS.map(([key, label], i) => ({ key, label, id: i + 1 }))
     };
   }
-  async roster(week, scope, meeting) {
+  async roster(week, scope, meeting, audience = 'all') {
     if (this.failReadAfterWrite && this.writeCount) throw new Error('Simulated readback timeout');
     const names = ['示範陳弟兄', '示範林姊妹', '示範張弟兄', '示範黃姊妹', '示範吳弟兄', '示範劉姊妹', '示範蔡弟兄', '示範王姊妹', '示範李弟兄', '示範周姊妹', '示範許弟兄', '示範鄭姊妹'];
     return names.slice(0, scope.level === 4 ? 5 : 12).map((name, i) => {
       const id = (scope.key === 'l3:612' ? 200 : 100) + i;
       const key = `${week.key}:${meeting.key}:${id}`;
       return { id, name, group: scope.label, attended: this.values.has(key) ? this.values.get(key) : i % 4 === 1, writable: !this.readOnlyIds.has(id) };
-    });
+    }).filter((member, i) => audience !== 'children' || i % 3 === 0);
   }
   async setAttendance(week, meeting, memberIds, attended) {
     this.writeCount++;

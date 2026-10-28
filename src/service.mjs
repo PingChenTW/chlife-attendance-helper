@@ -26,18 +26,20 @@ export class AttendanceService {
     return data;
   }
   async context(query) {
+    const audience = query.audience ?? 'all';
+    ensure(['all', 'children'].includes(audience), 400, 'AUDIENCE_NOT_ALLOWED', '無法使用這個名單種類，請重新選擇。');
     const week = requireWeek(query.week, this.now());
     const meta = await this.adapter.metadata(week);
     const scope = meta.scopes.find(s => s.key === query.scope);
     const meeting = meta.meetings.find(m => m.key === query.meeting);
     ensure(scope, 403, 'SCOPE_NOT_ALLOWED', '無法使用這個小區，請重新選擇。');
     ensure(meeting, 400, 'MEETING_NOT_ALLOWED', '只能使用指定的七個點名項目。');
-    return { week, meta, scope, meeting };
+    return { week, meta, scope, meeting, audience };
   }
   async metadata() {
     const weeks = weekOptions(this.now());
     const meta = await this.adapter.metadata(weeks[0]);
-    return { church: meta.church, group: meta.group, weeks, mode: this.adapter.mode, writesEnabled: this.allowWrites,
+    return { church: meta.church, group: meta.group, weeks, mode: this.adapter.mode, writesEnabled: this.allowWrites, supportsChildren: true,
       scopes: meta.scopes.map(({ key, label, path, level }) => ({ key, label, path, level })),
       meetings: meta.meetings.map(({ key, label }) => ({ key, label })) };
   }
@@ -47,9 +49,9 @@ export class AttendanceService {
       snapshot: this.sign({ ...query, expires: this.now().getTime() + 15 * 60000, rows: members.map(m => [m.id, m.attended, m.writable]) }) };
   }
   async roster(query) {
-    const { week, scope, meeting } = await this.context(query);
-    const members = await this.adapter.roster(week, scope, meeting);
-    return this.pack({ week: week.key, scope: scope.key, meeting: meeting.key }, members);
+    const { week, scope, meeting, audience } = await this.context(query);
+    const members = await this.adapter.roster(week, scope, meeting, audience);
+    return this.pack({ week: week.key, scope: scope.key, meeting: meeting.key, audience }, members);
   }
   submit(input) {
     const operation = this.queue.then(() => this.performSubmit(input));
@@ -72,11 +74,11 @@ export class AttendanceService {
       ensure(previous.fingerprint === fingerprint, 409, 'REQUEST_REUSED', '送出識別碼重複，請重新載入後再送出。');
       return previous.result;
     }
-    const { week, scope, meeting } = await this.context(input);
+    const { week, scope, meeting, audience } = await this.context(input);
     const snapshot = this.verify(input.snapshot);
-    ensure(snapshot.week === input.week && snapshot.scope === input.scope && snapshot.meeting === input.meeting, 400, 'SNAPSHOT_MISMATCH', '名單與送出範圍不一致，請重新載入。');
+    ensure(snapshot.week === input.week && snapshot.scope === input.scope && snapshot.meeting === input.meeting && (snapshot.audience ?? 'all') === audience, 400, 'SNAPSHOT_MISMATCH', '名單與送出範圍不一致，請重新載入。');
     const baseline = new Map(snapshot.rows.map(([id, attended, writable]) => [id, { attended, writable }]));
-    const before = await this.adapter.roster(week, scope, meeting);
+    const before = await this.adapter.roster(week, scope, meeting, audience);
     const current = new Map(before.map(row => [row.id, row]));
     for (const change of input.changes) {
       ensure(baseline.get(change.memberId)?.writable && current.get(change.memberId)?.writable, 409, 'ROSTER_CHANGED', '名單或權限已變動，請重新載入後核對；這次尚未寫入。');
@@ -92,7 +94,7 @@ export class AttendanceService {
       }
     }
     let after = null;
-    try { after = await this.adapter.roster(week, scope, meeting); } catch { /* Unknown is never success. */ }
+    try { after = await this.adapter.roster(week, scope, meeting, audience); } catch { /* Unknown is never success. */ }
     const afterById = new Map((after ?? []).map(row => [row.id, row]));
     const results = input.changes.map(change => ({ memberId: change.memberId,
       status: !afterById.has(change.memberId) ? 'unknown' : afterById.get(change.memberId).attended === change.attended ? 'confirmed' : 'notApplied' }));
@@ -100,7 +102,7 @@ export class AttendanceService {
     const status = confirmed === results.length ? 'confirmed' : after ? 'partial' : 'unconfirmed';
     const result = { status, confirmed, total: results.length, results,
       message: status === 'confirmed' ? `已確認 ${confirmed} 筆修改儲存至${this.adapter.mode === 'demo' ? '示範系統' : '原網站'}。` : after ? `已確認 ${confirmed}／${results.length} 筆；其餘尚未儲存，請核對後再送出。` : '暫時無法確認儲存結果，請重新查詢名單後核對。',
-      roster: after ? this.pack({ week: week.key, scope: scope.key, meeting: meeting.key }, after) : null };
+      roster: after ? this.pack({ week: week.key, scope: scope.key, meeting: meeting.key, audience }, after) : null };
     if (this.requests.size >= 1000) this.requests.delete(this.requests.keys().next().value);
     this.requests.set(input.requestId, { fingerprint, result, expires: this.now().getTime() + 30 * 60000 });
     return result;

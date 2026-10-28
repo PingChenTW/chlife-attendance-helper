@@ -41,7 +41,7 @@ export function createApp({ service, allowedOrigins = [], apiBase = '' }) {
         if (counter[kind] > (kind === 'write' ? 15 : 120)) { res.setHeader('Retry-After', String(Math.ceil((counter.reset - now) / 1000))); throw new AppError(429, 'RATE_LIMIT', '操作較頻繁，請稍後再試。'); }
         if (url.pathname === '/api/meta' && req.method === 'GET') { json(200, await service.metadata()); return; }
         if (url.pathname === '/api/roster' && req.method === 'GET') {
-          json(200, await service.roster({ week: url.searchParams.get('week'), scope: url.searchParams.get('scope'), meeting: url.searchParams.get('meeting') })); return;
+          json(200, await service.roster({ week: url.searchParams.get('week'), scope: url.searchParams.get('scope'), meeting: url.searchParams.get('meeting'), audience: url.searchParams.get('audience') ?? 'all' })); return;
         }
         if (url.pathname === '/api/attendance' && req.method === 'POST') {
           ensure(req.headers['content-type']?.split(';')[0].trim() === 'application/json' && req.headers['x-attendance-client'] === '1', 415, 'JSON_REQUIRED', '請使用點名工具送出資料。');

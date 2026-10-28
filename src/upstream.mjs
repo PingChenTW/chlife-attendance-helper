@@ -68,11 +68,13 @@ export class ChlifeAdapter {
     this.metaCache.set(week.key, { value, expires: Date.now() + 30000 });
     return value;
   }
-  async roster(week, scope, meeting) {
+  async roster(week, scope, meeting, audience = 'all') {
     const rows = [], seen = new Set();
     let start = 0, count = Infinity;
     while (start < count) {
       const body = { year: week.year, week: week.week, meeting: String(meeting.id), start, limit: 500 };
+      // Match the original site's children audience: preschool + elementary, regardless of baptism status.
+      if (audience === 'children') body.role = '學齡前,國小';
       for (const level of [2, 3, 4]) if (scope.ids[level]) body[`lv${level}_ids`] = String(scope.ids[level]);
       const data = await this.request('/members', { method: 'POST', body });
       ensure(Array.isArray(data?.members) && Array.isArray(data.meetingIds) && Number.isSafeInteger(data.count) && data.count >= 0 && data.count <= 10000, 502, 'UPSTREAM_SCHEMA', '原網站名單格式已變更，請聯絡管理者。');
