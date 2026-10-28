@@ -4,6 +4,8 @@
 
 **[開啟一起點名](https://pingchentw.github.io/chlife-attendance-helper/)**
 
+**[系統架構圖（互動版）](https://pingchentw.github.io/chlife-attendance-helper/architecture.html)** · [PNG 圖檔](public/architecture.png) · [SVG 向量圖](public/architecture.svg)
+
 首次使用主畫面的人名是空白的，也不放姓名搜尋。
 
 操作：**選本週／上週 → 選小區 → 選聚會 → 加入人名 → 在加入畫面搜尋並選人 → 返回主畫面點姓名 → 送出點名**。
