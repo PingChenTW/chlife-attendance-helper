@@ -94,7 +94,7 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const adapter = mode === 'demo' ? new DemoAdapter() : new ChlifeAdapter({ churchId: Number(process.env.CHLIFE_CHURCH_ID), account: process.env.CHLIFE_ACCOUNT, password: process.env.CHLIFE_PASSWORD, deviceToken: process.env.CHLIFE_DEVICE_TOKEN });
   const service = new AttendanceService(adapter, { allowWrites: mode === 'demo' || process.env.ALLOW_WRITES === 'true', ...(process.env.SNAPSHOT_SECRET ? { secret: process.env.SNAPSHOT_SECRET } : {}) });
   const reports = new ReportService(configuredReportSources(adapter,process.env.REPORT_ACCOUNTS_JSON));
-  const groups = configuredGroups(process.env.GROUP_LINKS_JSON,{...(process.env.SNAPSHOT_SECRET?{secret:process.env.SNAPSHOT_SECRET}:{})});
+  const groups = configuredGroups(process.env.GROUP_LINKS_JSON,{allowWrites:mode==='demo' || process.env.ALLOW_WRITES==='true',...(process.env.SNAPSHOT_SECRET?{secret:process.env.SNAPSHOT_SECRET}:{})});
   const server = createApp({ service, reports, groups, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean) });
   server.requestTimeout = 60000; server.headersTimeout = 15000;
   const port = Number(process.env.PORT ?? 4173), host = process.env.HOST ?? '127.0.0.1';

@@ -1,7 +1,7 @@
 import { ensure, AppError } from './errors.mjs';
 import { weekOptions, requireWeek } from './weeks.mjs';
 import { ChlifeAdapter } from './upstream.mjs';
-import configuredBaselines from './report-config.json' with { type: 'json' };
+import {BASELINES} from './baselines.mjs';
 import profiles from './report-profiles.json' with { type: 'json' };
 
 const FIELDS = ['sunday', 'gospel', 'home-in', 'home-out', 'reading', 'group', 'children-sunday', 'children-group'];
@@ -27,7 +27,7 @@ export function configuredReportSources(primary, json) {
   return sources;
 }
 export class ReportService {
-  constructor(sources, { now = () => new Date(), baselines = configuredBaselines } = {}) { this.sources = sources; this.now = now; this.baselines = baselines; }
+  constructor(sources, { now = () => new Date(), baselines = BASELINES } = {}) { this.sources = sources; this.now = now; this.baselines = baselines; }
   metadata() { return { weeks: weekOptions(this.now()), sources: this.sources.map(({key,label}) => ({key,label})), reportTypes:Object.entries(profiles).map(([key,{label,ready}])=>({key,label,ready})) }; }
   async summary(query) {
     requireWeek(query.week,this.now());
@@ -40,20 +40,40 @@ export class ReportService {
     const meta = await source.adapter.metadata(week);
     // Only fully granted level-3 nodes qualify. A grant to one level-4 group never grants its entire parent district.
     const scopes = meta.scopes.filter(s => s.level === 3 && s.ids?.[1] === source.adapter.churchId && Number.isSafeInteger(s.ids?.[2]) && Number.isSafeInteger(s.ids?.[3]));
-    const groups = [...new Map(scopes.map(s => [`l2:${s.ids[2]}`, { key: `l2:${s.ids[2]}`, label: s.path.split(' / ')[0] }])).values()];
-    const group = groups.find(g => g.key === (query.group || groups[0]?.key));
+    const groups = (meta.reportGroups ?? [...new Map(scopes.map(s => [`l2:${s.ids[2]}`, { key: `l2:${s.ids[2]}`, label: s.path.split(' / ')[0] }])).values()]).map(({key,label})=>({key,label}));
+    if(meta.supportsChurchReport)groups.push({key:'church',label:'全召會'});
+    const group = groups.find(g => g.key === (query.group || meta.defaultReportGroup || groups[0]?.key));
     ensure(group,403,'REPORT_GROUP','這個來源目前沒有可讀取完整小區報表的權限。');
+    const groupBase=id=>this.baselines[week.year]?.[source.adapter.churchId]?.[2]?.[id];
+    const pack=(rows,baseline,rowLevel,baselineKind,info={})=>({week,source:{key:source.key,label:source.label},church:meta.church,group,groups,mode:source.adapter.mode,rows,
+      totals:calculated({label:rowLevel===2?'合計':'小計',baseline,...Object.fromEntries(FIELDS.map(key=>[key,sum(rows.map(r=>r[key]))]))}),rowLevel,baselineKind,
+      loadedAt:info.loadedAt??this.now().toISOString(),cacheSeconds:info.cacheSeconds??0,inProgress:week.key===weekOptions(this.now())[0].key,baselineYear:week.year});
+    if(group.key==='church') {
+      ensure(source.adapter.churchCounts,403,'REPORT_GROUP','這個來源尚未開放全召會報表。');
+      const raw=await source.adapter.churchCounts(week,meta),values=Array.isArray(raw)?raw:raw?.rows;
+      ensure(Array.isArray(values) && values.length && new Set(values.map(r=>r.scope)).size===values.length && values.every(r=>FIELDS.every(key=>r[key]===null || count(r[key]))),502,'REPORT_INCOMPLETE','原網站報表資料不完整。');
+      const rows=values.map(r=>calculated({...r,baseline:count(groupBase(r.scope.split(':')[1]))?groupBase(r.scope.split(':')[1]):null}));
+      return pack(rows,sum(meta.reportGroups.map(g=>groupBase(g.id))),2,'groups',raw);
+    }
     const districts = scopes.filter(s => `l2:${s.ids[2]}` === group.key);
-    const data = await source.adapter.reportCounts(week,districts,meta);
-    ensure(Array.isArray(data) && data.length === districts.length && new Set(data.map(r=>r.scope)).size === data.length,502,'REPORT_INCOMPLETE','原網站報表資料不完整，請重新讀取。');
-    const rows = districts.map(scope => {
+    ensure(districts.length,403,'REPORT_GROUP','這個大組目前沒有可讀取的小區報表。');
+    const raw = await source.adapter.reportCounts(week,districts,meta);
+    const data=Array.isArray(raw)?raw:raw?.rows;
+    const omitted=raw.omittedScopes??[];
+    ensure(Array.isArray(omitted) && omitted.every(key=>districts.some(s=>s.key===key)),502,'REPORT_INCOMPLETE','原網站已結束小區資料無法確認。');
+    const listed=districts.filter(s=>!omitted.includes(s.key));
+    ensure(Array.isArray(data) && data.length === listed.length && new Set(data.map(r=>r.scope)).size === data.length,502,'REPORT_INCOMPLETE','原網站報表資料不完整，請重新讀取。');
+    const rows = listed.map(scope => {
       const value = data.find(r=>r.scope===scope.key);
       ensure(value && FIELDS.every(key => value[key] === null || count(value[key])),502,'REPORT_INCOMPLETE','原網站報表資料不完整，請重新讀取。');
-      const base = this.baselines[source.key]?.[week.year]?.[source.adapter.churchId]?.[scope.ids[3]];
+      const base = this.baselines[week.year]?.[source.adapter.churchId]?.[3]?.[scope.ids[3]];
       return calculated({ scope: scope.key, label: scope.label, baseline: count(base) ? base : null, ...Object.fromEntries(FIELDS.map(key=>[key,value[key]])) });
     });
-    const totals = calculated({ label: '小計', baseline: sum(rows.map(r=>r.baseline)), ...Object.fromEntries(FIELDS.map(key=>[key,sum(rows.map(r=>r[key]))])) });
-    return { week, source: {key:source.key,label:source.label}, church:meta.church, group, groups, mode:source.adapter.mode,
-      rows, totals, loadedAt:this.now().toISOString(), inProgress:week.key===weekOptions(this.now())[0].key, baselineYear:week.year };
+    for(const extra of raw.extraRows??[]) {
+      ensure(extra && typeof extra.scope==='string' && !rows.some(r=>r.scope===extra.scope) && FIELDS.every(key=>extra[key]===null || count(extra[key])),502,'REPORT_INCOMPLETE','原網站直屬報表資料不完整。');
+      rows.push(calculated({...extra,baseline:null}));
+    }
+    const explicitBase=groupBase(group.key.split(':')[1]);
+    return pack(rows,count(explicitBase)?explicitBase:sum(rows.map(r=>r.baseline)),3,count(explicitBase)?'group':'districts',raw);
   }
 }

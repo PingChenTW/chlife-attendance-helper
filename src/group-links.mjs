@@ -3,9 +3,9 @@ import { ensure, AppError } from './errors.mjs';
 import { AttendanceService } from './service.mjs';
 import { ChlifeAdapter } from './upstream.mjs';
 import { ReportService } from './reports.mjs';
-import baselines from './report-config.json' with { type: 'json' };
+import { ChurchReportAdapter } from './church-reports.mjs';
 
-export function configuredGroups(json, { secret = randomBytes(32).toString('hex'), now, adapterFactory = entry => new ChlifeAdapter(entry) } = {}) {
+export function configuredGroups(json, { secret = randomBytes(32).toString('hex'), now, allowWrites = true, adapterFactory = entry => new ChlifeAdapter(entry) } = {}) {
   const result = new Map();
   if (!json) return result;
   let config;
@@ -17,7 +17,7 @@ export function configuredGroups(json, { secret = randomBytes(32).toString('hex'
     adapters.set(entry.key,adapterFactory(entry));
   }
   for (const link of config.links) {
-    ensure(link && typeof link.group === 'string' && /^[1-8]$/.test(link.group) && !result.has(link.group) && adapters.has(link.source) && Number.isSafeInteger(link.groupId) && link.groupId > 0 && (link.allowWrites === undefined || typeof link.allowWrites === 'boolean'),500,'GROUP_CONFIG','大組入口設定不完整或重複。');
+    ensure(link && typeof link.group === 'string' && /^[1-8]$/.test(link.group) && !result.has(link.group) && adapters.has(link.source) && Number.isSafeInteger(link.groupId) && link.groupId > 0 && (link.allowWrites === undefined || typeof link.allowWrites === 'boolean') && (link.churchReports===undefined || typeof link.churchReports==='boolean'),500,'GROUP_CONFIG','大組入口設定不完整或重複。');
     const base = adapters.get(link.source), siteKey='group-'+link.group;
     const adapter = {
       mode:base.mode, churchId:base.churchId,
@@ -31,10 +31,11 @@ export function configuredGroups(json, { secret = randomBytes(32).toString('hex'
       roster:(...args)=>base.roster(...args),setAttendance:(...args)=>base.setAttendance(...args),reportCounts:(...args)=>base.reportCounts(...args)
     };
     const scopedSecret=createHmac('sha256',secret).update(siteKey+':'+base.churchId+':'+link.groupId).digest('hex');
-    const service=new AttendanceService(adapter,{...(now?{now}:{}),secret:scopedSecret,allowWrites:link.allowWrites===true});
+    const service=new AttendanceService(adapter,{...(now?{now}:{}),secret:scopedSecret,allowWrites:allowWrites && link.allowWrites===true});
     const metadata=service.metadata.bind(service);service.metadata=async()=>({...await metadata(),siteKey});
     // A group URL exposes only its own source. It cannot enumerate or switch to the legacy source.
-    const reports=new ReportService([{key:'primary',label:'本大組',adapter}],{...(now?{now}:{}),baselines:{primary:baselines[siteKey] ?? {}}});
+    const reportAdapter=link.churchReports ? new ChurchReportAdapter(base,{defaultGroupId:link.groupId}) : adapter;
+    const reports=new ReportService([{key:'primary',label:'本大組',adapter:reportAdapter}],{...(now?{now}:{})});
     result.set(link.group,{service,reports});
   }
   return result;

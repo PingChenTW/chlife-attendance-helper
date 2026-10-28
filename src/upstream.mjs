@@ -19,6 +19,7 @@ export class ChlifeAdapter {
       data = await response.json();
     } catch { throw new AppError(502, 'UPSTREAM_UNAVAILABLE', '暫時無法連接原網站，請稍後再試。'); }
     if (response.status === 401) throw new AppError(502, 'UPSTREAM_AUTH_EXPIRED', '原網站登入已過期，請稍後重新查詢。');
+    if(response.status===429){const seconds=Math.max(1,Math.min(120,Number(response.headers.get('retry-after'))||60));const error=new AppError(429,'UPSTREAM_RATE_LIMIT',`原網站報表查詢較頻繁，請約 ${seconds} 秒後重新讀取。`);error.retryAfter=seconds;throw error;}
     ensure(response.ok && data.success, 502, 'UPSTREAM_REJECTED', '原網站未接受這次操作，請重新查詢或聯絡管理者。');
     return data.data;
   }
