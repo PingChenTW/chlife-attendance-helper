@@ -7,10 +7,12 @@ import { AttendanceService } from './service.mjs';
 import { DemoAdapter } from './demo.mjs';
 import { ChlifeAdapter } from './upstream.mjs';
 import { ReportService, configuredReportSources } from './reports.mjs';
+import { configuredGroups } from './group-links.mjs';
+import { groupManifest } from '../public/group-context.js';
 
 const PUBLIC = path.resolve(fileURLToPath(new URL('../public/', import.meta.url)));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
-export function createApp({ service, reports = new ReportService(configuredReportSources(service.adapter)), allowedOrigins = [], apiBase = '' }) {
+export function createApp({ service, reports = new ReportService(configuredReportSources(service.adapter)), groups = new Map(), allowedOrigins = [], apiBase = '' }) {
   const limits = new Map();
   const connectOrigin = apiBase ? new URL(apiBase).origin : '';
   return http.createServer(async (req, res) => {
@@ -40,23 +42,31 @@ export function createApp({ service, reports = new ReportService(configuredRepor
         const kind = req.method === 'POST' ? 'write' : 'read';
         counter[kind]++; limits.set(key, counter);
         if (counter[kind] > (kind === 'write' ? 15 : 120)) { res.setHeader('Retry-After', String(Math.ceil((counter.reset - now) / 1000))); throw new AppError(429, 'RATE_LIMIT', '操作較頻繁，請稍後再試。'); }
-        if (url.pathname === '/api/meta' && req.method === 'GET') { json(200, await service.metadata()); return; }
-        if (url.pathname === '/api/reports/meta' && req.method === 'GET') { json(200,reports.metadata()); return; }
-        if (url.pathname === '/api/reports/summary' && req.method === 'GET') { json(200,await reports.summary({week:url.searchParams.get('week')}));return; }
-        if (url.pathname === '/api/reports/weekly' && req.method === 'GET') {
-          json(200,await reports.weekly({ week:url.searchParams.get('week'),source:url.searchParams.get('source') ?? 'primary',group:url.searchParams.get('group') })); return;
+        let apiPath=url.pathname,activeService=service,activeReports=reports;
+        if(apiPath.startsWith('/api/groups/')) {
+          const match=apiPath.match(/^\/api\/groups\/([1-8])\/(.+)$/);
+          ensure(match,400,'GROUP_LINK','大組連結無效，請使用管理者提供的完整網址。');
+          const entry=groups.get(match[1]);
+          ensure(entry,503,'GROUP_NOT_CONFIGURED','這個大組專屬入口尚未啟用，請聯絡管理者。');
+          activeService=entry.service;activeReports=entry.reports;apiPath='/api/'+match[2];
         }
-        if (url.pathname === '/api/roster' && req.method === 'GET') {
-          json(200, await service.roster({ week: url.searchParams.get('week'), scope: url.searchParams.get('scope'), meeting: url.searchParams.get('meeting'), audience: url.searchParams.get('audience') ?? 'all' })); return;
+        if (apiPath === '/api/meta' && req.method === 'GET') { json(200, await activeService.metadata()); return; }
+        if (apiPath === '/api/reports/meta' && req.method === 'GET') { json(200,activeReports.metadata()); return; }
+        if (apiPath === '/api/reports/summary' && req.method === 'GET') { json(200,await activeReports.summary({week:url.searchParams.get('week')}));return; }
+        if (apiPath === '/api/reports/weekly' && req.method === 'GET') {
+          json(200,await activeReports.weekly({ week:url.searchParams.get('week'),source:url.searchParams.get('source') ?? 'primary',group:url.searchParams.get('group') })); return;
         }
-        if (url.pathname === '/api/attendance' && req.method === 'POST') {
+        if (apiPath === '/api/roster' && req.method === 'GET') {
+          json(200, await activeService.roster({ week: url.searchParams.get('week'), scope: url.searchParams.get('scope'), meeting: url.searchParams.get('meeting'), audience: url.searchParams.get('audience') ?? 'all' })); return;
+        }
+        if (apiPath === '/api/attendance' && req.method === 'POST') {
           ensure(req.headers['content-type']?.split(';')[0].trim() === 'application/json' && req.headers['x-attendance-client'] === '1', 415, 'JSON_REQUIRED', '請使用點名工具送出資料。');
           const chunks = []; let size = 0;
           for await (const chunk of req) { size += chunk.length; ensure(size <= 262144, 413, 'TOO_LARGE', '送出的資料過多，請分批處理。'); chunks.push(chunk); }
           let input;
           try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new AppError(400, 'BAD_JSON', '送出資料格式錯誤。'); }
           ensure(input && typeof input === 'object' && !Array.isArray(input), 400, 'BAD_JSON', '送出資料格式錯誤。');
-          json(200, await service.submit(input)); return;
+          json(200, await activeService.submit(input)); return;
         }
         throw new AppError(404, 'NOT_FOUND', '找不到此功能。');
       }
@@ -68,6 +78,7 @@ export function createApp({ service, reports = new ReportService(configuredRepor
       ensure(target.startsWith(PUBLIC + path.sep) && types[path.extname(target)], 404, 'NOT_FOUND', '找不到此頁面。');
       let content;
       if (pathname === '/config.js') content = Buffer.from(`window.ATTENDANCE_CONFIG = ${JSON.stringify({ apiBase })};\n`);
+      else if (/^\/manifest-group-[1-8]\.webmanifest$/.test(pathname)) content=Buffer.from(JSON.stringify(groupManifest(JSON.parse(await readFile(path.join(PUBLIC,'manifest.webmanifest'),'utf8')),pathname.match(/group-([1-8])/)[1])));
       else { try { content = await readFile(target); } catch { throw new AppError(404, 'NOT_FOUND', '找不到此頁面。'); } }
       res.writeHead(200, { 'Content-Type': types[path.extname(target)] }); res.end(req.method === 'HEAD' ? undefined : content);
     } catch (error) {
@@ -83,7 +94,8 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const adapter = mode === 'demo' ? new DemoAdapter() : new ChlifeAdapter({ churchId: Number(process.env.CHLIFE_CHURCH_ID), account: process.env.CHLIFE_ACCOUNT, password: process.env.CHLIFE_PASSWORD, deviceToken: process.env.CHLIFE_DEVICE_TOKEN });
   const service = new AttendanceService(adapter, { allowWrites: mode === 'demo' || process.env.ALLOW_WRITES === 'true', ...(process.env.SNAPSHOT_SECRET ? { secret: process.env.SNAPSHOT_SECRET } : {}) });
   const reports = new ReportService(configuredReportSources(adapter,process.env.REPORT_ACCOUNTS_JSON));
-  const server = createApp({ service, reports, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean) });
+  const groups = configuredGroups(process.env.GROUP_LINKS_JSON,{...(process.env.SNAPSHOT_SECRET?{secret:process.env.SNAPSHOT_SECRET}:{})});
+  const server = createApp({ service, reports, groups, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean) });
   server.requestTimeout = 60000; server.headersTimeout = 15000;
   const port = Number(process.env.PORT ?? 4173), host = process.env.HOST ?? '127.0.0.1';
   server.listen(port, host, () => console.log(`Attendance helper: http://${host}:${port} (${mode}, writes ${service.allowWrites ? 'enabled' : 'disabled'})`));
