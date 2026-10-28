@@ -21,7 +21,7 @@ test('HTTP serves the app, limits CORS, hides internal files, and validates writ
   assert.equal(cors.headers.get('cache-control'), 'no-store');
   const meta = await cors.json(); assert.equal(meta.meetings.length, 7);
   assert.equal(meta.supportsChildren, true);
-  const query = new URLSearchParams({ week: meta.weeks[0].key, scope: meta.scopes[0].key, meeting: meta.meetings[0].key, audience: 'children' });
+  const query = new URLSearchParams({ week: meta.weeks[0].key, scope: meta.scopes[0].key, meeting: meta.childMeetings[0].key, audience: 'children' });
   const children = await (await fetch(base + '/api/roster?' + query)).json();
   assert.equal(children.audience, 'children'); assert.equal(children.members.length, 4);
   query.set('audience', 'unknown');
