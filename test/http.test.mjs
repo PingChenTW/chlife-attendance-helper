@@ -1,0 +1,25 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { createApp } from '../src/server.mjs';
+import { AttendanceService } from '../src/service.mjs';
+import { DemoAdapter } from '../src/demo.mjs';
+
+test('HTTP serves the app, limits CORS, hides internal files, and validates write inputs', async t => {
+  const service = new AttendanceService(new DemoAdapter(), { allowWrites: true });
+  const server = createApp({ service, allowedOrigins: ['https://example.github.io'] });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const html = await fetch(base); assert.equal(html.status, 200); assert.match(await html.text(), /一起點名/);
+  assert.match(html.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.equal((await fetch(base + '/src/server.mjs')).status, 404);
+  assert.equal((await fetch(base + '/.env')).status, 404);
+  assert.equal((await fetch(base + '/api/meta', { headers: { Origin: 'https://unlisted.example' } })).status, 403);
+  const cors = await fetch(base + '/api/meta', { headers: { Origin: 'https://example.github.io' } });
+  assert.equal(cors.headers.get('access-control-allow-origin'), 'https://example.github.io');
+  assert.equal(cors.headers.get('cache-control'), 'no-store');
+  const meta = await cors.json(); assert.equal(meta.meetings.length, 7);
+  assert.equal((await fetch(base + '/api/attendance', { method: 'POST', body: '{}' })).status, 415);
+  assert.equal((await fetch(base + '/api/attendance', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Attendance-Client': '1' }, body: 'not-json' })).status, 400);
+});
