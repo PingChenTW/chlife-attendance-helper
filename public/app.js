@@ -18,7 +18,7 @@ async function api(path, options = {}) {
   try { response = await fetch(base + path, { cache: 'no-store', credentials: 'omit', signal: AbortSignal.timeout(90000), ...options }); }
   catch { throw new Error(navigator.onLine ? '連線中斷，尚未確認儲存。請重新讀取名單核對。' : '目前沒有網路，請連上網路後重新讀取。'); }
   let data;
-  try { data = await response.json(); } catch { throw new Error('尚未連接點名後端，請聯絡工具管理者。'); }
+  try { data = await response.json(); } catch { throw new Error('點名服務可能正在啟動，請稍候約一分鐘，再按「重新讀取」。'); }
   if (!response.ok) throw new Error(data.error?.message ?? '暫時無法完成，請稍後再試。');
   return data;
 }
