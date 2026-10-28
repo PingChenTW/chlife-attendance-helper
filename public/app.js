@@ -1,8 +1,9 @@
 import { changesFor, mergeDesired, allDesiredConfirmed } from './model.js';
 import { createPracticeApi } from './practice.js';
+import { selectionKey, readSelected, saveSelected, selectedMembers } from './selection.js';
 
 const $ = id => document.getElementById(id);
-const state = { meta: null, query: null, roster: null, drafts: new Map(), busy: false, loading: false, seq: 0, search: '', lastSaved: false };
+const state = { meta: null, query: null, roster: null, drafts: new Map(), selected: new Set(), busy: false, loading: false, seq: 0, addSearch: '', lastSaved: false };
 const base = String(window.ATTENDANCE_CONFIG?.apiBase ?? '').replace(/\/$/, '');
 const practice = window.ATTENDANCE_CONFIG?.practice ? createPracticeApi() : null;
 function notice(message, error = false, retry = false) {
@@ -23,6 +24,8 @@ async function api(path, options = {}) {
 }
 const prettyDate = date => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
 function currentWeek() { return state.meta.weeks.find(w => w.key === state.query.week); }
+function phoneStorage() { try { return window.localStorage; } catch { return null; } }
+function loadSelection() { state.selected = readSelected(phoneStorage(), selectionKey(state.meta, state.query.scope)); }
 function renderControls() {
   $('scope-select').value = state.query.scope; $('meeting-select').value = state.query.meeting;
   $('scope-select').disabled = state.busy || state.loading; $('meeting-select').disabled = state.busy || state.loading;
@@ -30,7 +33,7 @@ function renderControls() {
     button.setAttribute('aria-pressed', String(button.dataset.week === state.query.week)); button.disabled = state.busy || state.loading;
   }
   $('refresh-button').disabled = state.busy || state.loading;
-  $('search').disabled = state.busy || state.loading || !state.roster;
+  $('add-button').disabled = state.busy || state.loading || !state.roster;
 }
 function renderRoster() {
   const changes = state.roster ? changesFor(state.roster, state.drafts) : [];
@@ -50,12 +53,11 @@ function renderRoster() {
   const meeting = state.meta.meetings.find(m => m.key === state.query.meeting);
   const scope = state.meta.scopes.find(s => s.key === state.query.scope);
   $('roster-title').textContent = `${scope.label} · ${meeting.label}`;
-  const all = state.roster.members;
-  const visible = all.filter(m => m.name.toLocaleLowerCase().includes(state.search.toLocaleLowerCase()));
-  const present = all.filter(m => state.drafts.has(m.id) ? state.drafts.get(m.id) : m.attended).length;
-  $('member-count').textContent = state.search ? `找到 ${visible.length} 人` : `出席 ${present} 人 / 共 ${all.length} 人`;
+  const visible = selectedMembers(state.roster, state.selected);
+  const present = visible.filter(m => state.drafts.has(m.id) ? state.drafts.get(m.id) : m.attended).length;
+  $('member-count').textContent = `已加入 ${visible.length} 人 · 出席 ${present} 人`;
   $('empty-state').hidden = visible.length > 0;
-  $('empty-state').textContent = state.search ? '沒有找到這個姓名。' : '這個小區目前沒有可點名的人員。';
+  $('empty-state').textContent = state.selected.size ? '已加入的人員目前不在這份名單中，請按「加入人名」重新選擇。' : '還沒有加入人名。\n請按上方「＋ 加入人名」。';
   const fragment = document.createDocumentFragment();
   for (const member of visible) {
     const attended = state.drafts.has(member.id) ? state.drafts.get(member.id) : member.attended;
@@ -84,6 +86,48 @@ function renderRoster() {
   }
   list.append(fragment);
 }
+function renderAddPeople() {
+  const results = $('add-results'), previousScroll = results.scrollTop;
+  const query = state.addSearch.toLocaleLowerCase();
+  const members = query ? state.roster.members.filter(m => m.name.toLocaleLowerCase().includes(query)) : selectedMembers(state.roster, state.selected);
+  $('add-count').textContent = `已加入 ${selectedMembers(state.roster, state.selected).length} 人`;
+  results.replaceChildren();
+  if (!members.length) {
+    const empty = document.createElement('p'); empty.className = 'empty-state';
+    empty.textContent = query ? '這個小區找不到此姓名，請換個字搜尋。' : '請在上方輸入姓名，搜尋要加入的人。';
+    results.append(empty); return;
+  }
+  for (const member of members) {
+    const selected = state.selected.has(member.id);
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'member add-person';
+    button.setAttribute('aria-pressed', String(selected));
+    button.setAttribute('aria-label', `${member.name}，${selected ? '已加入，點一下移除' : '加入名單'}`);
+    const check = document.createElement('span'); check.className = 'check'; check.textContent = '✓'; check.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span'); text.className = 'member-text';
+    const name = document.createElement('span'); name.className = 'member-name'; name.textContent = member.name;
+    const group = document.createElement('span'); group.className = 'member-group'; group.textContent = member.group;
+    text.append(name, group);
+    const status = document.createElement('span'); status.className = 'member-state'; status.textContent = selected ? '已加入' : '加入';
+    button.append(check, text, status);
+    button.onclick = () => {
+      if (selected && state.drafts.has(member.id) && !window.confirm('這個人的點名尚未送出。要放棄修改，並從這支手機的名單移除嗎？')) return;
+      if (selected) { state.selected.delete(member.id); state.drafts.delete(member.id); }
+      else state.selected.add(member.id);
+      const saved = saveSelected(phoneStorage(), selectionKey(state.meta, state.query.scope), state.selected);
+      $('add-message').textContent = saved ? (selected ? '已從這支手機的名單移除。' : '已加入，並保存在這支手機。') : '這個瀏覽器目前無法保存名單，關閉後可能需要重新加入。';
+      $('add-message').classList.toggle('storage-error', !saved);
+      renderRoster(); renderAddPeople();
+    };
+    results.append(button);
+  }
+  results.scrollTop = previousScroll;
+}
+function openAddPeople() {
+  if (!state.roster || state.busy || state.loading) return;
+  state.addSearch = ''; $('add-search').value = ''; $('add-message').textContent = '';
+  $('add-scope').textContent = `在「${state.meta.scopes.find(s => s.key === state.query.scope).label}」搜尋。這份自選名單只保存在這支手機。`;
+  renderAddPeople(); $('add-dialog').showModal();
+}
 async function loadRoster({ preserve = false } = {}) {
   const seq = ++state.seq; state.loading = true; state.lastSaved = false;
   const desired = preserve ? new Map(state.drafts) : new Map();
@@ -99,7 +143,9 @@ async function loadRoster({ preserve = false } = {}) {
 }
 async function changeScope(field, value) {
   if (state.drafts.size && !window.confirm('還有點名尚未送出。要放棄這些修改，切換範圍嗎？')) { renderControls(); return; }
-  state.query[field] = value; state.search = ''; $('search').value = ''; await loadRoster();
+  state.query[field] = value;
+  if (field === 'scope') loadSelection();
+  await loadRoster();
 }
 async function submit() {
   const changes = changesFor(state.roster, state.drafts);
@@ -136,6 +182,7 @@ async function start() {
     const meta = await api('/api/meta');
     if (!meta.scopes?.length || !meta.meetings?.length || !meta.weeks?.length) throw new Error('尚未取得可用的小區與聚會，請稍後再試。');
     state.meta = meta; state.query = { week: meta.weeks[0].key, scope: meta.scopes.find(s => s.level === 3)?.key ?? meta.scopes[0].key, meeting: meta.meetings[0].key };
+    loadSelection();
     $('group-label').textContent = meta.group;
     $('mode-banner').hidden = meta.mode !== 'demo' && meta.writesEnabled;
     $('mode-banner').textContent = meta.mode === 'demo' ? '這是練習版，姓名都是示範資料。可以放心練習點名。' : '目前是名單查看版，尚未開放正式點名寫入。';
@@ -154,7 +201,10 @@ function connection() { $('connection').textContent = navigator.onLine ? '已連
 $('scope-select').onchange = e => changeScope('scope', e.target.value);
 $('meeting-select').onchange = e => changeScope('meeting', e.target.value);
 $('refresh-button').onclick = () => loadRoster({ preserve: true });
-$('search').oninput = e => { state.search = e.target.value.trim(); renderRoster(); };
+$('add-button').onclick = openAddPeople;
+$('add-search').oninput = e => { state.addSearch = e.target.value.trim(); renderAddPeople(); };
+$('add-close').onclick = () => $('add-dialog').close();
+$('add-done').onclick = () => $('add-dialog').close();
 $('submit-button').onclick = submit;
 window.addEventListener('beforeunload', event => { if (state.drafts.size || state.busy) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('online', connection); window.addEventListener('offline', connection);
