@@ -21,6 +21,12 @@ test('HTTP serves the app, limits CORS, hides internal files, and validates writ
   assert.equal(cors.headers.get('cache-control'), 'no-store');
   const meta = await cors.json(); assert.equal(meta.meetings.length, 7);
   assert.equal(meta.supportsChildren, true);
+  const reportMeta = await (await fetch(base + '/api/reports/meta')).json();
+  assert.equal(reportMeta.sources.length,1); assert.equal('adapter' in reportMeta.sources[0],false);
+  const reportResponse = await fetch(base+'/api/reports/weekly?'+new URLSearchParams({week:reportMeta.weeks[0].key}));
+  assert.equal(reportResponse.status,200); assert.equal(reportResponse.headers.get('cache-control'),'no-store');
+  const report = await reportResponse.json(); assert.equal(report.rows.length,2); assert.equal(report.totals.baseline,null);
+  assert.equal((await fetch(base+'/api/reports/weekly?week='+reportMeta.weeks[0].key+'&source=unknown')).status,403);
   const query = new URLSearchParams({ week: meta.weeks[0].key, scope: meta.scopes[0].key, meeting: meta.childMeetings[0].key, audience: 'children' });
   const children = await (await fetch(base + '/api/roster?' + query)).json();
   assert.equal(children.audience, 'children'); assert.equal(children.members.length, 4);
