@@ -1,6 +1,9 @@
 import { changesFor, mergeDesired, allDesiredConfirmed, districtScopes } from './model.js';
 import { createPracticeApi } from './practice.js';
 import { selectionKey, readSelected, saveSelected, selectedMembers, addPeopleMembers } from './selection.js';
+import { parseGroupContext, groupApiPath, applyGroupContext } from './group-context.js';
+
+const linkGroup=parseGroupContext(window.location.search);applyGroupContext(linkGroup,document);
 
 const $ = id => document.getElementById(id);
 const state = { meta: null, query: null, roster: null, drafts: new Map(), selected: new Set(), busy: false, loading: false, seq: 0, addSearch: '', addShowAll: false, lastSaved: false, meetingByAudience: {} };
@@ -13,9 +16,11 @@ function notice(message, error = false, retry = false) {
   if (retry) { const button = document.createElement('button'); button.textContent = '重新讀取'; button.onclick = () => state.meta ? loadRoster({ preserve: true }) : start(); node.append(button); }
 }
 async function api(path, options = {}) {
+  const requestPath=groupApiPath(path,linkGroup);
+  if(linkGroup.id && practice)throw new Error('大組專屬連結需連接正式服務，目前為練習版。');
   if (practice) return practice(path, options);
   let response;
-  try { response = await fetch(base + path, { cache: 'no-store', credentials: 'omit', signal: AbortSignal.timeout(90000), ...options }); }
+  try { response = await fetch(base + requestPath, { cache: 'no-store', credentials: 'omit', signal: AbortSignal.timeout(90000), ...options }); }
   catch { throw new Error(navigator.onLine ? '連線中斷，尚未確認儲存。請重新讀取名單核對。' : '目前沒有網路，請連上網路後重新讀取。'); }
   let data;
   try { data = await response.json(); } catch { throw new Error('點名服務可能正在啟動，請稍候約一分鐘，再按「重新讀取」。'); }

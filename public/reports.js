@@ -1,13 +1,17 @@
 import { REPORT_COLUMNS, reportNumber, reportCsv } from './report-model.js';
 import { createPracticeApi } from './practice.js';
+import { parseGroupContext, groupApiPath, applyGroupContext } from './group-context.js';
+const linkGroup=parseGroupContext(window.location.search);applyGroupContext(linkGroup,document);
 const $ = id=>document.getElementById(id);
 const base = String(window.ATTENDANCE_CONFIG?.apiBase ?? '').replace(/\/$/,'');
 const practice = window.ATTENDANCE_CONFIG?.practice ? createPracticeApi() : null;
 const state = { meta:null,week:null,source:'primary',group:'',report:null,busy:false,seq:0 };
 async function api(path) {
+  const requestPath=groupApiPath(path,linkGroup);
+  if(linkGroup.id && practice)throw new Error('大組專屬連結需連接正式服務，目前為練習版。');
   if (practice) return practice(path);
   let response;
-  try { response = await fetch(base+path,{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(90000)}); }
+  try { response = await fetch(base+requestPath,{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(90000)}); }
   catch { throw new Error(navigator.onLine?'報表連線中斷，請稍後重新讀取。':'目前沒有網路，請連線後重新讀取報表。'); }
   let data;
   try { data = await response.json(); } catch { throw new Error('報表服務可能正在啟動，請稍候約一分鐘再重新讀取。'); }
