@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#365d50"><meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="description" content="選小區、選週次，輕鬆完成召會生活點名。">
+  <title>一起點名 · 召會生活</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./styles.css">
+  <script src="./config.js" defer></script><script src="./app.js" type="module"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header"><a class="brand" href="./" aria-label="一起點名首頁"><span class="brand-mark" aria-hidden="true">✓</span><span>一起點名<small>召會生活 · 點名助手</small></span></a><span id="connection" class="connection">連接中</span></header>
+    <main>
+      <section class="intro"><div><p class="eyebrow" id="group-label">召會生活</p><h1>選好聚會，再點姓名</h1></div></section>
+      <div id="mode-banner" class="mode-banner" hidden></div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <section class="selection-card" aria-label="點名範圍">
+        <div class="section-kicker"><span class="step-number">1</span> 選擇點名範圍</div>
+        <div id="week-switch" class="week-switch" role="group" aria-label="點名週次"></div>
+        <label class="field-label" for="scope-select">小區或排</label>
+        <div class="select-wrap"><select id="scope-select" disabled><option>正在取得小區…</option></select><span aria-hidden="true">⌄</span></div>
+        <label class="field-label" for="meeting-select">聚會項目</label>
+        <div class="select-wrap"><select id="meeting-select" disabled><option>正在取得聚會…</option></select><span aria-hidden="true">⌄</span></div>
+      </section>
+      <section class="roster-section" aria-labelledby="roster-title">
+        <div class="roster-heading"><div><div class="section-kicker"><span class="step-number">2</span> 點姓名，勾選出席</div><h2 id="roster-title">準備名單中</h2></div><button class="icon-button" id="refresh-button" disabled>重新讀取</button></div>
+        <p id="roster-caption" class="roster-caption">勾選後，請按下方「送出點名」儲存。</p>
+        <div class="roster-tools"><label class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="輸入姓名搜尋" aria-label="搜尋姓名" autocomplete="off" disabled></label></div>
+        <div class="list-meta"><span id="member-count">正在取得名單</span><span class="unsaved-hint" id="unsaved-hint" hidden>● 有待送出修改</span></div>
+        <div id="members" class="members" aria-busy="true"><div class="empty-state">正在連接點名系統…</div></div>
+        <div id="empty-state" class="empty-state" hidden></div>
+        <p class="privacy-note">只顯示點名所需資料 · 出席狀態以系統回查結果為準</p>
+      </section>
+    </main>
+    <footer class="submit-dock"><div class="dock-inner"><div class="dock-summary"><strong id="pending-count">尚未修改</strong><span id="pending-detail">選完姓名再送出</span></div><button id="submit-button" class="primary-button" disabled>送出點名</button></div></footer>
+  </div>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title"><form method="dialog"><span class="dialog-symbol" aria-hidden="true">✓</span><h2 id="confirm-title">確認送出點名</h2><p id="confirm-scope" class="confirm-scope"></p><div id="confirm-detail" class="confirm-detail"></div><p class="dialog-note">送出後會重新查詢，確認每筆儲存結果。</p><div class="dialog-actions"><button value="cancel" class="secondary-button">繼續核對</button><button value="send" class="primary-button">確認送出</button></div></form></dialog>
+  <noscript>請開啟瀏覽器 JavaScript，以使用點名工具。</noscript>
+</body>
+</html>
