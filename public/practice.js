@@ -23,6 +23,20 @@ export function createPracticeApi() {
     }).filter((member, i) => query.audience !== 'children' || i % 3 === 0) };
   }
   return async (path, options = {}) => {
+    if (path === '/api/reports/meta') return { weeks:weeks(), sources:[{key:'primary',label:'示範資料'}] };
+    if (path.startsWith('/api/reports/weekly?')) {
+      const query=Object.fromEntries(new URLSearchParams(path.split('?')[1])),week=weeks().find(w=>w.key===query.week);
+      if(!week)throw new Error('請重新選擇本週或上週。');
+      const rows=scopes.map(scope=>{
+        const row={scope:scope.key,label:scope.label,baseline:null,sundayRatio:null,gospelRatio:null,homeRatio:null};
+        for(const meeting of [...meetings,...childMeetings]) row[meeting.key]=roster({week:week.key,scope:scope.key,meeting:meeting.key,audience:meeting.key.startsWith('children-')?'children':'all'}).members.filter(m=>m.attended).length;
+        row.homeTotal=row['home-in']+row['home-out'];return row;
+      });
+      const totals={label:'小計',baseline:null,sundayRatio:null,gospelRatio:null,homeRatio:null};
+      for(const key of [...meetings,...childMeetings].map(m=>m.key).concat('homeTotal'))totals[key]=rows.reduce((sum,row)=>sum+row[key],0);
+      const group={key:'demo',label:'示範大組'};
+      return {week,source:{key:'primary',label:'示範資料'},church:'示範召會',group,groups:[group],mode:'demo',rows,totals,baselineYear:week.year,loadedAt:new Date().toISOString(),inProgress:week.key===weeks()[0].key};
+    }
     if (path === '/api/meta') return { church: '示範召會', group: '示範大組', mode: 'demo', writesEnabled: true, supportsChildren: true, scopes, meetings, childMeetings, weeks: weeks() };
     if (path.startsWith('/api/roster?')) return roster(Object.fromEntries(new URLSearchParams(path.split('?')[1])));
     if (path === '/api/attendance') {

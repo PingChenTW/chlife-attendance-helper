@@ -1,5 +1,5 @@
-const CACHE = 'attendance-shell-v8';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './model.js', './practice.js', './selection.js', './icon.svg', './icon-192.png', './icon-512.png', './manifest.webmanifest'];
+const CACHE = 'attendance-shell-v9';
+const ASSETS = ['./', './index.html', './styles.css', './app.js', './model.js', './practice.js', './selection.js', './reports.html', './reports.js', './reports.css', './report-model.js', './icon.svg', './icon-192.png', './icon-512.png', './manifest.webmanifest'];
 const allowed = new Set(ASSETS.map(asset => new URL(asset, self.registration.scope).href));
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', event => { event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('attendance-shell-') && key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())); });
