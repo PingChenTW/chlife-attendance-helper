@@ -45,7 +45,7 @@ function render(report) {
   function tableRow(row) { const tr=document.createElement('tr');const name=document.createElement('th');name.scope='row';name.textContent=row.label;tr.append(name);for(const [key] of REPORT_COLUMNS){const cell=document.createElement('td');cell.className=key.endsWith('Ratio')?'ratio':key==='baseline'?'baseline':'';cell.textContent=reportNumber(row[key],key);tr.append(cell);}return tr; }
   $('report-table').querySelector('tbody').replaceChildren(...report.rows.map(tableRow));
   $('report-table').querySelector('tfoot').replaceChildren(tableRow(report.totals));
-  $('baseline-note').textContent=report.mode==='demo'?'示範資料未設定正式基數。':`${report.baselineYear} 基數：目前第六大組已依您提供的圖片設定。其他來源、新小區或新年度若尚未設定，會顯示「—」。更新時間：${new Date(report.loadedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})}`;
+  $('baseline-note').textContent=report.mode==='demo'?'示範資料未設定正式基數。':`${report.baselineYear} 基數：${report.rows.filter(row=>row.baseline!==null).length}／${report.rows.length} 個小區已由管理者設定。未設定時顯示「—」。更新時間：${new Date(report.loadedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})}`;
   metrics();$('report-content').hidden=false;
 }
 async function load() {
