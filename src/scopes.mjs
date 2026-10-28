@@ -4,6 +4,21 @@ export const MEETINGS = [
   ['home-in', '家聚會受訪', '家聚會受訪'], ['group', '排聚會', '小排'],
   ['prayer', '禱告聚會', '禱告'], ['reading', '生命讀經', '生命讀經'], ['gospel', '福音出訪', '福音出訪']
 ];
+export const CHILD_MEETINGS = [
+  ['children-sunday', '兒童主日', '主日'],
+  ['children-group', '兒童排', '兒童排(兒童)'],
+  ['children-home', '兒童家聚會', '家聚會(兒童)']
+];
+export function selectChildMeetings(rows) {
+  const selected = [];
+  for (const [key, label, name] of CHILD_MEETINGS) {
+    // The original site's Add meeting menu permits enable=1 entries even when hidden by default.
+    const matches = rows.filter(row => row.name === name && [1, 2].includes(Number(row.enable)));
+    if (matches.length !== 1) return [];
+    selected.push({ key, label, id: Number(matches[0].id) });
+  }
+  return selected;
+}
 export function selectMeetings(rows) {
   return MEETINGS.map(([key, label, name]) => {
     const matches = rows.filter(row => row.name === name && Number(row.enable) === 2 && Number(row.visible) !== 0);

@@ -31,17 +31,18 @@ export class AttendanceService {
     const week = requireWeek(query.week, this.now());
     const meta = await this.adapter.metadata(week);
     const scope = meta.scopes.find(s => s.key === query.scope);
-    const meeting = meta.meetings.find(m => m.key === query.meeting);
+    const meeting = (audience === 'children' ? meta.childMeetings ?? [] : meta.meetings).find(m => m.key === query.meeting);
     ensure(scope, 403, 'SCOPE_NOT_ALLOWED', '無法使用這個小區，請重新選擇。');
-    ensure(meeting, 400, 'MEETING_NOT_ALLOWED', '只能使用指定的七個點名項目。');
+    ensure(meeting, 400, 'MEETING_NOT_ALLOWED', '無法使用這個聚會，請重新選擇。');
     return { week, meta, scope, meeting, audience };
   }
   async metadata() {
     const weeks = weekOptions(this.now());
     const meta = await this.adapter.metadata(weeks[0]);
-    return { church: meta.church, group: meta.group, weeks, mode: this.adapter.mode, writesEnabled: this.allowWrites, supportsChildren: true,
+    return { church: meta.church, group: meta.group, weeks, mode: this.adapter.mode, writesEnabled: this.allowWrites, supportsChildren: meta.childMeetings?.length === 3,
       scopes: meta.scopes.map(({ key, label, path, level }) => ({ key, label, path, level })),
-      meetings: meta.meetings.map(({ key, label }) => ({ key, label })) };
+      meetings: meta.meetings.map(({ key, label }) => ({ key, label })),
+      childMeetings: (meta.childMeetings ?? []).map(({ key, label }) => ({ key, label })) };
   }
   pack(query, members) {
     ensure(members.length <= 10000 && new Set(members.map(m => m.id)).size === members.length, 502, 'INVALID_ROSTER', '原網站名單格式有變動，請稍後再試。');
