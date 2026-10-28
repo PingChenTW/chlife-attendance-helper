@@ -1,9 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectionKey, readSelected, saveSelected, selectedMembers } from '../public/selection.js';
+import { selectionKey, readSelected, saveSelected, selectedMembers, addPeopleMembers } from '../public/selection.js';
 
 function phone() { const data = new Map(); return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value), data }; }
 const meta = { mode: 'live', church: '測試召會' };
+
+test('browse all lists the current roster without adding people, while search and saved selections still work', () => {
+  const roster = { members: [{ id: 1, name: '陳弟兄' }, { id: 2, name: '林姊妹' }, { id: 3, name: '陳姊妹' }] };
+  const selected = new Set([2, 999]);
+  assert.deepEqual(addPeopleMembers(roster, selected), [roster.members[1]]);
+  assert.deepEqual(addPeopleMembers(roster, selected, '', true), roster.members);
+  assert.deepEqual(addPeopleMembers(roster, selected, ' 陳 ', true), [roster.members[0], roster.members[2]]);
+  assert.deepEqual(addPeopleMembers(roster, selected, '陳', false), [roster.members[0], roster.members[2]]);
+  assert.deepEqual(addPeopleMembers(roster, selected, '找不到', true), []);
+  assert.deepEqual(addPeopleMembers({ members: [] }, selected, '', true), []);
+  assert.deepEqual([...selected], [2, 999]);
+});
 test('first use has no selected names; reload retains IDs without storing personal names', () => {
   const storage = phone(), key = selectionKey(meta, 'l3:611');
   assert.equal(readSelected(storage, key).size, 0);
