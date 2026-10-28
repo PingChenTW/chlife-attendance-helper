@@ -67,6 +67,12 @@ test('upstream formal weekly reads adult and both child roles, filters unrelated
   a.request = async () => ({ meetings: [1,2,3,4,5,6,8].map(id=>({id})), rows: [] });
   await assert.rejects(a.reportCounts({ year: 2026, week: 44 },scopes,meta), /不完整/);
 });
+test('official role-filtered reports omit districts with no eligible children, while general missing rows still fail', async () => {
+  const a = new ChlifeAdapter({churchId:49,account:'fake',password:'fake'}), meta = await adapter().metadata(), scopes = meta.scopes.slice(0,2);
+  a.request = async path => { const p = new URL(path,'https://example.test').searchParams;return { meetings:[1,2,3,4,5,6,8].map(id=>({id})), rows:(p.has('role')?[200]:[200,201]).map(id=>({node_id:id,row_kind:'node',attendance:Object.fromEntries([1,2,3,4,5,6,8].map(k=>[k,2]))})) }; };
+  const rows = await a.reportCounts({year:2026,week:44},scopes,meta);
+  assert.equal(rows[1]['children-sunday'],0);assert.equal(rows[0]['children-sunday'],4);
+});
 test('CSV preserves Unicode, two decimals, unknowns and prevents spreadsheet formula execution', () => {
   assert.equal(reportNumber(null,'sunday'),'—'); assert.equal(reportNumber(133.3333,'sundayRatio'),'133.33%');
   const csv = reportCsv({church:'召會',group:{label:'大組'},week:{key:'2026-W44'},baselineYear:2026,rows:[{label:'=測試',baseline:12,sunday:16,sundayRatio:16/12*100}],totals:{label:'小計'}});
