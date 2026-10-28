@@ -1,4 +1,4 @@
-const CACHE = 'attendance-shell-v10';
+const CACHE = 'attendance-shell-v11';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './model.js', './practice.js', './selection.js', './reports.html', './reports.js', './reports.css', './report-model.js', './group-context.js', './icon.svg', './icon-192.png', './icon-512.png', './manifest.webmanifest', ...Array.from({length:8},(_,i)=>'./manifest-group-'+(i+1)+'.webmanifest')];
 const allowed = new Set(ASSETS.map(asset => new URL(asset, self.registration.scope).href));
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())); });

@@ -17,19 +17,19 @@
       <section class="selection-card" aria-label="報表範圍">
         <div id="report-weeks" class="week-switch" role="group" aria-label="報表週次"></div>
         <div id="source-field" hidden><label class="field-label" for="report-source">資料範圍</label><div class="select-wrap"><select id="report-source"></select><span aria-hidden="true">⌄</span></div></div>
-        <label class="field-label" for="report-group">大組</label><div class="select-wrap"><select id="report-group" disabled><option>正在取得大組…</option></select><span aria-hidden="true">⌄</span></div>
+        <label class="field-label" for="report-group">報表範圍</label><div class="select-wrap"><select id="report-group" disabled><option>正在取得大組…</option></select><span aria-hidden="true">⌄</span></div>
       </section>
       <div id="report-status" class="notice report-status" role="status" aria-live="polite">正在連接報表服務，首次啟動可能需要約一分鐘…</div>
       <button id="report-retry" class="secondary-button" hidden>重新讀取報表</button>
       <section id="report-content" hidden aria-label="報表結果">
         <div class="report-title"><div><h2 id="report-title"></h2><p id="report-date" class="report-help"></p></div><button id="report-refresh" class="secondary-button">更新</button></div>
         <p id="report-progress" class="mode-banner"></p>
-        <label class="field-label" for="report-district">查看小區</label><div class="select-wrap"><select id="report-district"></select><span aria-hidden="true">⌄</span></div>
+        <label class="field-label" id="report-detail-label" for="report-district">查看小區</label><div class="select-wrap"><select id="report-district"></select><span aria-hidden="true">⌄</span></div>
         <section class="report-detail" aria-labelledby="detail-title"><h2 id="detail-title">大組小計</h2><div id="report-metrics" class="report-metrics"></div></section>
         <p class="report-help report-note">一般聚會沿用正式週報預設口徑，主日由原站拆分兒童。兒童主日、兒童排專欄統計「學齡前、國小」，含已受浸兒童，範圍與原站「童（福朋）」欄不同。家聚會合計為受訪＋出訪，同人兩項都有登錄會計兩次。</p>
-        <details id="full-report"><summary>查看各小區完整表格</summary><p class="report-help">表格可左右滑動；「—」代表尚未設定或無法確認。</p><div class="table-scroll" role="region" aria-label="各小區完整報表，可左右捲動" tabindex="0"><table id="report-table"><caption id="table-caption"></caption><thead></thead><tbody></tbody><tfoot></tfoot></table></div><button id="report-download" class="secondary-button">下載 CSV（Excel 可開啟）</button></details>
+        <details id="full-report"><summary id="report-table-toggle">查看各小區完整表格</summary><p class="report-help">表格可左右滑動；「—」代表尚未設定或無法確認。</p><div class="table-scroll" role="region" aria-label="完整報表，可左右捲動" tabindex="0"><table id="report-table"><caption id="table-caption"></caption><thead></thead><tbody></tbody><tfoot></tfoot></table></div><button id="report-download" class="secondary-button">下載 CSV（Excel 可開啟）</button></details>
         <p id="baseline-note" class="report-help report-note"></p>
-        <p class="report-help report-note">報表使用完整小區資料，不受手機自選名單影響。比率＝人數÷基數；小計以總人數÷總基數計算。部分小區缺基數時，小計基數及比率顯示「—」。</p>
+        <p class="report-help report-note">報表不受手機自選名單影響。比率＝人數÷基數；小計以總人數÷總基數計算。大組基數可獨立設定；小區未設定時，其比率顯示「—」。直屬、歷史或未列小區資料若有出席，會另列「其他」，保持與正式大組合計一致。</p>
       </section>
     </main>
   </div><noscript>請開啟 JavaScript，以查看報表。</noscript>

@@ -6,7 +6,7 @@ export const REPORT_COLUMNS = [
 export function reportNumber(value,key) { return value === null || value === undefined ? '—' : key.endsWith('Ratio') ? value.toFixed(2)+'%' : String(value); }
 export function reportCsv(report) {
   const cell = value => '"'+String(value).replace(/^[=+@-]/,"'$&").replaceAll('"','""')+'"';
-  const lines = [[report.church,report.group.label,report.week.key],['小區',...REPORT_COLUMNS.map(([key,label])=>key==='baseline'?report.baselineYear+' 基數':label)],
+  const lines = [[report.church,report.group.label,report.week.key],[report.rowLevel===2?'大組':'小區',...REPORT_COLUMNS.map(([key,label])=>key==='baseline'?report.baselineYear+' 基數':label)],
     ...[...report.rows,report.totals].map(row=>[row.label,...REPORT_COLUMNS.map(([key])=>reportNumber(row[key],key))])];
   return '\uFEFF'+lines.map(row=>row.map(cell).join(',')).join('\r\n');
 }

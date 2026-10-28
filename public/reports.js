@@ -26,7 +26,7 @@ function busy(value) {
 }
 function metrics() {
   const report=state.report, row=report.rows.find(r=>r.scope===$('report-district').value) ?? report.totals;
-  $('detail-title').textContent=row===report.totals?`${report.group.label} · 小計`:row.label;
+  $('detail-title').textContent=row===report.totals?`${report.group.label} · ${report.rowLevel===2?'合計':'小計'}`:row.label;
   $('report-metrics').replaceChildren(...REPORT_COLUMNS.map(([key,label])=>{
     const box=document.createElement('div');box.className='report-metric'+(key.endsWith('Ratio')?' ratio':'');
     const title=document.createElement('span');title.textContent=key==='baseline'?`${report.baselineYear} 基數`:label;
@@ -38,18 +38,23 @@ function render(report) {
   $('report-church').textContent=report.church;
   $('report-demo').hidden=report.mode!=='demo';
   options($('report-group'),report.groups,report.group.key);
-  options($('report-district'),[{key:'total',label:'全部小區 · 大組小計'},...report.rows.map(r=>({key:r.scope,label:r.label}))],'total');
+  const churchView=report.rowLevel===2;
+  const detailLabel=$('report-detail-label') ?? document.querySelector('label[for="report-district"]');
+  const tableToggle=$('report-table-toggle') ?? document.querySelector('#full-report summary');
+  if(detailLabel)detailLabel.textContent=churchView?'查看大組':'查看小區';
+  if(tableToggle)tableToggle.textContent=churchView?'查看各大組完整表格':'查看各小區完整表格';
+  options($('report-district'),[{key:'total',label:churchView?'全召會 · 合計':'全部小區 · 大組小計'},...report.rows.map(r=>({key:r.scope,label:r.label}))],'total');
   $('report-title').textContent=`${report.group.label} · ${report.week.label}`;
   $('report-date').textContent=`${report.week.year} 年第 ${report.week.week} 週 · ${report.week.start} ～ ${report.week.end}`;
-  $('report-progress').textContent=report.inProgress?'本週進行中：目前數字只反映已登錄的出席。':'上週資料仍可能因補登而更新。';
+  $('report-progress').textContent=(report.inProgress?'本週進行中：目前數字只反映已登錄的出席。':'上週資料仍可能因補登而更新。')+(report.cacheSeconds?'報表最多約一分鐘更新一次。':'');
   $('table-caption').textContent=`${report.group.label} · ${report.week.key}`;
   const header=document.createElement('tr');
-  for (const label of ['小區',...REPORT_COLUMNS.map(([key,label])=>key==='baseline'?`${report.baselineYear} 基數`:label)]) { const cell=document.createElement('th');cell.scope='col';cell.textContent=label;header.append(cell); }
+  for (const label of [churchView?'大組':'小區',...REPORT_COLUMNS.map(([key,label])=>key==='baseline'?`${report.baselineYear} 基數`:label)]) { const cell=document.createElement('th');cell.scope='col';cell.textContent=label;header.append(cell); }
   $('report-table').querySelector('thead').replaceChildren(header);
   function tableRow(row) { const tr=document.createElement('tr');const name=document.createElement('th');name.scope='row';name.textContent=row.label;tr.append(name);for(const [key] of REPORT_COLUMNS){const cell=document.createElement('td');cell.className=key.endsWith('Ratio')?'ratio':key==='baseline'?'baseline':'';cell.textContent=reportNumber(row[key],key);tr.append(cell);}return tr; }
   $('report-table').querySelector('tbody').replaceChildren(...report.rows.map(tableRow));
   $('report-table').querySelector('tfoot').replaceChildren(tableRow(report.totals));
-  $('baseline-note').textContent=report.mode==='demo'?'示範資料未設定正式基數。':`${report.baselineYear} 基數：${report.rows.filter(row=>row.baseline!==null).length}／${report.rows.length} 個小區已由管理者設定。未設定時顯示「—」。更新時間：${new Date(report.loadedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})}`;
+  $('baseline-note').textContent=report.mode==='demo'?'示範資料未設定正式基數。':`${report.baselineYear} 基數：${report.rows.filter(row=>row.baseline!==null).length}／${report.rows.length} 個${churchView?'大組':'小區'}已設定。${report.baselineKind==='group'?'大組小計另採管理者提供的大組基數。':report.baselineKind==='groups'?'全召會基數採大組基數加總。':''}未設定時顯示「—」。資料時間：${new Date(report.loadedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})}`;
   metrics();$('report-content').hidden=false;
 }
 async function load() {
@@ -69,7 +74,7 @@ async function start() {
   try {
     state.meta=await api('/api/reports/meta');state.week=state.meta.weeks[0].key;state.source=state.meta.sources[0].key;
     options($('report-source'),state.meta.sources,state.source);$('source-field').hidden=state.meta.sources.length<=1;
-    $('report-weeks').replaceChildren(...state.meta.weeks.map(week=>{ const button=document.createElement('button');button.className='week-button';button.dataset.week=week.key;button.setAttribute('aria-pressed',String(week.key===state.week));button.append(document.createTextNode(week.label));const small=document.createElement('small');small.textContent=`${week.start.slice(5).replace('-','/')} ～ ${week.end.slice(5).replace('-','/')}`;button.append(small);button.onclick=()=>{state.week=week.key;state.group='';load();};return button; }));
+    $('report-weeks').replaceChildren(...state.meta.weeks.map(week=>{ const button=document.createElement('button');button.className='week-button';button.dataset.week=week.key;button.setAttribute('aria-pressed',String(week.key===state.week));button.append(document.createTextNode(week.label));const small=document.createElement('small');small.textContent=`${week.start.slice(5).replace('-','/')} ～ ${week.end.slice(5).replace('-','/')}`;button.append(small);button.onclick=()=>{state.week=week.key;load();};return button; }));
     await load();
   } catch(error) { $('report-status').textContent=error.message;$('report-status').className='notice error report-status';$('report-retry').hidden=false; }
 }
