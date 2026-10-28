@@ -69,12 +69,24 @@ export class ChlifeAdapter {
     return value;
   }
   async roster(week, scope, meeting, audience = 'all') {
+    if (audience !== 'children') return this.readRoster(week, scope, meeting);
+    // The original endpoint accepts one role; a comma-joined value silently returns an empty list.
+    const children = new Map();
+    for (const role of ['學齡前', '國小']) {
+      for (const member of await this.readRoster(week, scope, meeting, role)) {
+        const previous = children.get(member.id);
+        ensure(!previous || (previous.name === member.name && previous.attended === member.attended && previous.writable === member.writable), 409, 'ROSTER_MOVED', '讀取時兒童名單已變動，請重新載入。');
+        children.set(member.id, member);
+      }
+    }
+    return [...children.values()];
+  }
+  async readRoster(week, scope, meeting, role) {
     const rows = [], seen = new Set();
     let start = 0, count = Infinity;
     while (start < count) {
       const body = { year: week.year, week: week.week, meeting: String(meeting.id), start, limit: 500 };
-      // Match the original site's children audience: preschool + elementary, regardless of baptism status.
-      if (audience === 'children') body.role = '學齡前,國小';
+      if (role) body.role = role;
       for (const level of [2, 3, 4]) if (scope.ids[level]) body[`lv${level}_ids`] = String(scope.ids[level]);
       const data = await this.request('/members', { method: 'POST', body });
       ensure(Array.isArray(data?.members) && Array.isArray(data.meetingIds) && Number.isSafeInteger(data.count) && data.count >= 0 && data.count <= 10000, 502, 'UPSTREAM_SCHEMA', '原網站名單格式已變更，請聯絡管理者。');
