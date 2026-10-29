@@ -12,7 +12,7 @@ import { groupManifest } from '../public/group-context.js';
 
 const PUBLIC = path.resolve(fileURLToPath(new URL('../public/', import.meta.url)));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
-export function createApp({ service, reports = new ReportService(configuredReportSources(service.adapter)), groups = new Map(), allowedOrigins = [], apiBase = '' }) {
+export function createApp({ service, reports = new ReportService(configuredReportSources(service.adapter)), groups = new Map(), defaultGroup = null, allowedOrigins = [], apiBase = '' }) {
   const limits = new Map();
   const connectOrigin = apiBase ? new URL(apiBase).origin : '';
   return http.createServer(async (req, res) => {
@@ -77,7 +77,7 @@ export function createApp({ service, reports = new ReportService(configuredRepor
       const target = path.resolve(PUBLIC, '.' + pathname);
       ensure(target.startsWith(PUBLIC + path.sep) && types[path.extname(target)], 404, 'NOT_FOUND', '找不到此頁面。');
       let content;
-      if (pathname === '/config.js') content = Buffer.from(`window.ATTENDANCE_CONFIG = ${JSON.stringify({ apiBase })};\n`);
+      if (pathname === '/config.js') content = Buffer.from(`window.ATTENDANCE_CONFIG = ${JSON.stringify({ apiBase, defaultGroup })};\n`);
       else if (/^\/manifest-group-[1-8]\.webmanifest$/.test(pathname)) content=Buffer.from(JSON.stringify(groupManifest(JSON.parse(await readFile(path.join(PUBLIC,'manifest.webmanifest'),'utf8')),pathname.match(/group-([1-8])/)[1])));
       else { try { content = await readFile(target); } catch { throw new AppError(404, 'NOT_FOUND', '找不到此頁面。'); } }
       res.writeHead(200, { 'Content-Type': types[path.extname(target)] }); res.end(req.method === 'HEAD' ? undefined : content);
@@ -88,16 +88,28 @@ export function createApp({ service, reports = new ReportService(configuredRepor
   });
 }
 
+export function configuredRuntime(env = {}, { mode = env.APP_MODE ?? 'demo', now, adapterFactory } = {}) {
+  ensure(['live', 'demo'].includes(mode), 500, 'CONFIG', 'APP_MODE must be live or demo');
+  const options = { allowWrites: mode === 'demo' || env.ALLOW_WRITES === 'true', ...(env.SNAPSHOT_SECRET ? { secret: env.SNAPSHOT_SECRET } : {}), ...(now ? { now } : {}) };
+  const groups = configuredGroups(env.GROUP_LINKS_JSON, { ...options, ...(adapterFactory ? { adapterFactory } : {}) });
+  const defaultGroup = env.DEFAULT_GROUP ?? null;
+  if (defaultGroup !== null) {
+    ensure(typeof defaultGroup === 'string' && /^[1-8]$/.test(defaultGroup) && groups.has(defaultGroup), 500, 'DEFAULT_GROUP', '預設大組入口尚未設定，請管理者檢查。');
+    // Reuse the same account, signing scope and queue; no separate legacy login is created.
+    return { ...groups.get(defaultGroup), groups, defaultGroup };
+  }
+  const adapter = mode === 'demo' ? new DemoAdapter() : new ChlifeAdapter({ churchId: Number(env.CHLIFE_CHURCH_ID), account: env.CHLIFE_ACCOUNT, password: env.CHLIFE_PASSWORD, deviceToken: env.CHLIFE_DEVICE_TOKEN });
+  const service = new AttendanceService(adapter, options);
+  const reports = new ReportService(configuredReportSources(adapter, env.REPORT_ACCOUNTS_JSON));
+  return { service, reports, groups, defaultGroup };
+}
+
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   const mode = process.argv.includes('--demo') ? 'demo' : (process.env.APP_MODE ?? 'demo');
-  ensure(['live', 'demo'].includes(mode), 500, 'CONFIG', 'APP_MODE must be live or demo');
-  const adapter = mode === 'demo' ? new DemoAdapter() : new ChlifeAdapter({ churchId: Number(process.env.CHLIFE_CHURCH_ID), account: process.env.CHLIFE_ACCOUNT, password: process.env.CHLIFE_PASSWORD, deviceToken: process.env.CHLIFE_DEVICE_TOKEN });
-  const service = new AttendanceService(adapter, { allowWrites: mode === 'demo' || process.env.ALLOW_WRITES === 'true', ...(process.env.SNAPSHOT_SECRET ? { secret: process.env.SNAPSHOT_SECRET } : {}) });
-  const reports = new ReportService(configuredReportSources(adapter,process.env.REPORT_ACCOUNTS_JSON));
-  const groups = configuredGroups(process.env.GROUP_LINKS_JSON,{allowWrites:mode==='demo' || process.env.ALLOW_WRITES==='true',...(process.env.SNAPSHOT_SECRET?{secret:process.env.SNAPSHOT_SECRET}:{})});
-  const server = createApp({ service, reports, groups, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean) });
+  const runtime = configuredRuntime(process.env, { mode });
+  const server = createApp({ ...runtime, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean) });
   server.requestTimeout = 60000; server.headersTimeout = 15000;
   const port = Number(process.env.PORT ?? 4173), host = process.env.HOST ?? '127.0.0.1';
-  server.listen(port, host, () => console.log(`Attendance helper: http://${host}:${port} (${mode}, writes ${service.allowWrites ? 'enabled' : 'disabled'})`));
+  server.listen(port, host, () => console.log(`Attendance helper: http://${host}:${port} (${mode}, writes ${runtime.service.allowWrites ? 'enabled' : 'disabled'})`));
   process.on('SIGTERM', () => server.close());
 }
