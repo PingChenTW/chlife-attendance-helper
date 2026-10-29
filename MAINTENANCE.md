@@ -43,7 +43,7 @@
 | 手機自選名單保存 | [public/selection.js](public/selection.js)，按手機／入口／小區／一般或兒童分開保存人員 ID |
 | 原網站登入及點名介面 | [src/upstream.mjs](src/upstream.mjs) |
 | 正式週報的八大組與全召會彙總 | [src/church-reports.mjs](src/church-reports.mjs)、[src/reports.mjs](src/reports.mjs) |
-| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v12`；不快取 API、名單或帳密 |
+| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v13`；不快取 API、名單或帳密 |
 | 自動測試與 Pages 發布 | [.github/workflows/pages.yml](.github/workflows/pages.yml) |
 
 若日後更換預設大組，要同時調整 Render 的 `DEFAULT_GROUP` 與 `scripts/build.mjs` 的正式前端預設值；測試也要一併更新。不要只改首頁文字。
@@ -63,6 +63,7 @@
 
 ## 問題排查與回復
 
+- 自選名單像是消失：先確認是否從桌面網頁 App 改為 LINE／Safari／Chrome，這些環境可能不共用本機儲存空間。同一台手機不代表同一份名單；先回原先加入名單的環境、選相同小區及一般／兒童種類核對，不要先刪除捷徑、清除資料或重裝。現在同一瀏覽環境的原首頁與 `?group=6` 會共用六大組儲存鍵。`loadSelected` 只在六大組的新鍵不存在時承接舊首頁對應鍵，保留原副本；已有新鍵，即使名單為空也不覆蓋。此機制不做跨 App 同步。
 - 服務閒置或剛部署時可能需要啟動時間；先確認 Render 狀態，再重新讀取。不要因首次連線失敗就更換或公開帳密。
 - 「預設大組入口尚未設定」：確認 `DEFAULT_GROUP` 為字串 `6`，且 `links` 有 `group:"6"`，其 `source` 對應有效來源。設定錯誤應停止啟動，不能臨時改用舊帳號。
 - 「大組專屬入口尚未啟用」：核對 `GROUP_LINKS_JSON` 的 `links`，不要把錯誤入口轉到另一大組。
