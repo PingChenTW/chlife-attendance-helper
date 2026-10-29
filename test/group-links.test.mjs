@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { configuredGroups } from '../src/group-links.mjs';
-import { createApp } from '../src/server.mjs';
+import { createApp, configuredRuntime } from '../src/server.mjs';
 import { AttendanceService } from '../src/service.mjs';
 import { DemoAdapter } from '../src/demo.mjs';
-import { parseGroupContext, groupApiPath, groupHref, groupManifest } from '../public/group-context.js';
+import { parseGroupContext, groupApiPath, groupHref, groupManifest, redirectDefaultGroup } from '../public/group-context.js';
 import { selectionKey } from '../public/selection.js';
 
 const now=()=>new Date('2026-10-28T04:00:00Z');
@@ -70,4 +70,43 @@ test('mobile links retain group through navigation, PWA launch and saved selecti
   for(const query of ['?group=9','?group=7&group=6','?group=07','?group='])assert.throws(()=>groupApiPath('/api/meta',parseGroupContext(query)),/連結/);
   assert.equal(groupApiPath('/api/meta',parseGroupContext('')),'/api/meta');
   assert.notEqual(selectionKey({mode:'live',church:'church',siteKey:'group-7'},'l3:1'),selectionKey({mode:'live',church:'church'},'l3:1'));
+});
+
+test('default entrance shares the sixth service and reports without any legacy credentials',async t=>{
+  const sixth={...config,links:[{group:'6',source:'shared',groupId:100,allowWrites:true}]};
+  const runtime=configuredRuntime({APP_MODE:'live',DEFAULT_GROUP:'6',ALLOW_WRITES:'true',GROUP_LINKS_JSON:JSON.stringify(sixth)},{now,adapterFactory:fake});
+  assert.equal(runtime.service,runtime.groups.get('6').service);
+  assert.equal(runtime.reports,runtime.groups.get('6').reports);
+  const server=createApp(runtime);server.listen(0,'127.0.0.1');await once(server,'listening');
+  t.after(()=>{server.closeAllConnections();server.close();});
+  const base='http://127.0.0.1:'+server.address().port;
+  const meta=await(await fetch(base+'/api/meta')).json();assert.equal(meta.siteKey,'group-6');
+  const configResponse=await(await fetch(base+'/config.js')).text();assert.match(configResponse,/"defaultGroup":"6"/);
+  const query={week:'2026-W44',scope:meta.scopes[0].key,meeting:'sunday'};
+  const roster=await(await fetch(base+'/api/groups/6/roster?'+new URLSearchParams(query))).json();
+  const saved=await fetch(base+'/api/attendance',{method:'POST',headers:{'Content-Type':'application/json','X-Attendance-Client':'1'},body:JSON.stringify({...query,snapshot:roster.snapshot,requestId:randomUUID(),changes:[{memberId:roster.members[0].id,attended:!roster.members[0].attended}]})});
+  assert.equal(saved.status,200);assert.equal((await saved.json()).status,'confirmed');
+  assert.equal((await fetch(base+'/api/roster?'+new URLSearchParams({...query,scope:'l3:outside'}))).status,403);
+  const report=await(await fetch(base+'/api/reports/weekly?week=2026-W44')).json();
+  assert.equal(report.rows.length,2);
+});
+
+test('a missing or invalid default group fails closed instead of loading legacy credentials',()=>{
+  for(const value of ['9','06','', '6']) {
+    const env={APP_MODE:'live',DEFAULT_GROUP:value,GROUP_LINKS_JSON:JSON.stringify(config)};
+    assert.throws(()=>configuredRuntime(env,{now,adapterFactory:fake}));
+  }
+  const demo=configuredRuntime({APP_MODE:'demo'});assert.equal(demo.service.adapter.mode,'demo');assert.equal(demo.defaultGroup,null);
+});
+
+test('the original attendance and report URLs redirect to their default group while preserving other links',()=>{
+  for(const path of ['/chlife-attendance-helper/','/chlife-attendance-helper/index.html','/chlife-attendance-helper/reports.html']) {
+    let replaced;const loc={href:'https://example.test'+path+'?week=previous#details',replace:value=>{replaced=value;}};
+    assert.equal(redirectDefaultGroup(loc,{defaultGroup:'6'}),true);
+    const target=new URL(replaced);assert.equal(target.pathname,path);assert.equal(target.searchParams.get('group'),'6');assert.equal(target.searchParams.get('week'),'previous');assert.equal(target.hash,'#details');
+  }
+  for(const search of ['?group=1','?group=6','?group=9','?group=6&group=7']) {
+    assert.equal(redirectDefaultGroup({href:'https://example.test/'+search,replace:()=>assert.fail('an explicit group must not be replaced')},{defaultGroup:'6'}),false);
+  }
+  for(const settings of [{practice:true,defaultGroup:'6'},{},{defaultGroup:'https://elsewhere.test'}])assert.equal(redirectDefaultGroup({href:'https://example.test/',replace:()=>assert.fail('practice or invalid configuration must not redirect')},settings),false);
 });
