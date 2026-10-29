@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectionKey, readSelected, saveSelected, selectedMembers, addPeopleMembers } from '../public/selection.js';
+import { selectionKey, readSelected, loadSelected, saveSelected, selectedMembers, addPeopleMembers } from '../public/selection.js';
 
 function phone() { const data = new Map(); return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value), data }; }
 const meta = { mode: 'live', church: '測試召會' };
@@ -44,4 +44,48 @@ test('invalid storage cannot inject unknown names or force a false persistence c
   assert.deepEqual([...readSelected(storage, key)], [2]);
   assert.deepEqual(selectedMembers({ members: [{ id: 1 }] }, new Set([999])), []);
   assert.equal(saveSelected({ setItem() { throw new Error('Storage blocked'); } }, key, new Set([1])), false);
+});
+
+test('the sixth entrance recovers the original homepage selection once without removing the old copy',()=>{
+  const storage=phone(),scope='l3:2878',six={...meta,siteKey:'group-6'};
+  const oldKey=selectionKey(meta,scope),newKey=selectionKey(six,scope);
+  saveSelected(storage,oldKey,new Set([2,1]));const original=storage.data.get(oldKey);
+  assert.deepEqual([...loadSelected(storage,six,scope)],[2,1]);
+  assert.deepEqual([...readSelected(storage,newKey)],[2,1]);assert.equal(storage.data.get(oldKey),original);
+  // The default homepage and ?group=6 both receive the same metadata/site key.
+  assert.deepEqual([...loadSelected(storage,{...six},scope)],[2,1]);
+  saveSelected(storage,newKey,new Set([3]));assert.deepEqual([...loadSelected(storage,six,scope)],[3]);
+});
+
+test('a deliberately empty or existing sixth selection never resurrects removed legacy people',()=>{
+  const storage=phone(),scope='l3:2878',six={...meta,siteKey:'group-6'};
+  saveSelected(storage,selectionKey(meta,scope),new Set([1,2]));
+  saveSelected(storage,selectionKey(six,scope),new Set());
+  assert.equal(loadSelected(storage,six,scope).size,0);
+  storage.setItem(selectionKey(six,scope),'{broken');
+  assert.equal(loadSelected(storage,six,scope).size,0);
+});
+
+test('legacy recovery stays inside the same phone, sixth group, church, district and audience',()=>{
+  const storage=phone(),scope='l3:2878',six={...meta,siteKey:'group-6'};
+  saveSelected(storage,selectionKey(meta,scope),new Set([1]));
+  saveSelected(storage,selectionKey(meta,scope,'children'),new Set([2]));
+  assert.deepEqual([...loadSelected(storage,six,scope,'children')],[2]);
+  assert.deepEqual([...loadSelected(storage,six,scope)],[1]);
+  assert.equal(loadSelected(phone(),six,scope).size,0);
+  assert.equal(loadSelected(storage,{...six,siteKey:'group-7'},scope).size,0);
+  assert.equal(loadSelected(storage,{...six,church:'另一召會'},scope).size,0);
+  assert.equal(loadSelected(storage,{...six,mode:'demo'},scope).size,0);
+  assert.equal(loadSelected(storage,six,'l3:2880').size,0);
+  assert.deepEqual([...loadSelected(storage,meta,scope)],[1]);
+});
+
+test('invalid legacy storage is not migrated and a failed copy leaves the recoverable original intact',()=>{
+  const storage=phone(),scope='l3:2878',six={...meta,siteKey:'group-6'},oldKey=selectionKey(meta,scope),newKey=selectionKey(six,scope);
+  for(const value of ['{broken',JSON.stringify({version:2,ids:[1]}),JSON.stringify({version:1,ids:Array(10001).fill(1)})]){
+    storage.setItem(oldKey,value);assert.equal(loadSelected(storage,six,scope).size,0);assert.equal(storage.getItem(newKey),null);
+  }
+  saveSelected(storage,oldKey,new Set([1]));
+  const blocked={getItem:key=>storage.getItem(key),setItem:()=>{throw new Error('Storage blocked');}};
+  assert.deepEqual([...loadSelected(blocked,six,scope)],[1]);assert.deepEqual([...readSelected(storage,oldKey)],[1]);assert.equal(storage.getItem(newKey),null);
 });
