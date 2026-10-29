@@ -2,11 +2,29 @@
 export function selectionKey(meta, scope, audience = 'all') {
   return 'attendance-selected:v1:' + [meta.mode, meta.church, scope].map(encodeURIComponent).join(':') + (audience === 'children' ? ':children' : '') + (meta.siteKey ? ':site:'+encodeURIComponent(meta.siteKey) : '');
 }
+function decodeSelected(raw) {
+  const data = JSON.parse(raw ?? 'null');
+  if (data?.version !== 1 || !Array.isArray(data.ids) || data.ids.length > 10000) return null;
+  return new Set(data.ids.filter(id => Number.isSafeInteger(id) && id > 0));
+}
 export function readSelected(storage, key) {
   try {
-    const data = JSON.parse(storage?.getItem(key) ?? 'null');
-    if (data?.version !== 1 || !Array.isArray(data.ids) || data.ids.length > 10000) return new Set();
-    return new Set(data.ids.filter(id => Number.isSafeInteger(id) && id > 0));
+    return decodeSelected(storage?.getItem(key)) ?? new Set();
+  } catch { return new Set(); }
+}
+export function loadSelected(storage, meta, scope, audience = 'all') {
+  const key = selectionKey(meta, scope, audience);
+  try {
+    const current = storage?.getItem(key) ?? null;
+    // Even an intentionally empty selection is authoritative: never restore removed people.
+    if (current !== null) return decodeSelected(current) ?? new Set();
+    if (meta.mode !== 'live' || meta.siteKey !== 'group-6') return new Set();
+    const originalKey = selectionKey({ ...meta, siteKey: undefined }, scope, audience);
+    const recovered = decodeSelected(storage?.getItem(originalKey));
+    if (!recovered) return new Set();
+    // The retired homepage was the sixth group. Copy IDs only; keep its original as a backup.
+    saveSelected(storage, key, recovered);
+    return recovered;
   } catch { return new Set(); }
 }
 export function saveSelected(storage, key, selected) {

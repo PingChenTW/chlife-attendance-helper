@@ -1,6 +1,6 @@
 import { changesFor, mergeDesired, allDesiredConfirmed, districtScopes } from './model.js';
 import { createPracticeApi } from './practice.js';
-import { selectionKey, readSelected, saveSelected, selectedMembers, addPeopleMembers } from './selection.js';
+import { selectionKey, loadSelected, saveSelected, selectedMembers, addPeopleMembers } from './selection.js';
 import { parseGroupContext, groupApiPath, applyGroupContext, redirectDefaultGroup } from './group-context.js';
 
 const redirecting=redirectDefaultGroup(window.location,window.ATTENDANCE_CONFIG);
@@ -36,7 +36,7 @@ function renderMeetingOptions() {
   $('meeting-select').replaceChildren(...availableMeetings().map(meeting => { const option = document.createElement('option'); option.value = meeting.key; option.textContent = meeting.label; return option; }));
 }
 function phoneStorage() { try { return window.localStorage; } catch { return null; } }
-function loadSelection() { state.selected = readSelected(phoneStorage(), selectionKey(state.meta, state.query.scope, state.query.audience)); }
+function loadSelection() { state.selected = loadSelected(phoneStorage(), state.meta, state.query.scope, state.query.audience); }
 function rosterActionLabel() {
   const count = state.roster ? selectedMembers(state.roster, state.selected).length : state.selected.size;
   return count ? '編輯名單' : '加入名單';
