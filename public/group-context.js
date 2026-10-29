@@ -1,4 +1,13 @@
 const numerals=['','一','二','三','四','五','六','七','八'];
+export function redirectDefaultGroup(location, config = {}) {
+  if(config.practice || !/^[1-8]$/.test(config.defaultGroup ?? ''))return false;
+  const target=new URL(location.href);
+  // Explicit links, including invalid ones, must retain their existing validation behavior.
+  if(target.searchParams.has('group'))return false;
+  target.searchParams.set('group',config.defaultGroup);
+  location.replace(target.href);
+  return true;
+}
 export function parseGroupContext(search='') {
   const values=new URLSearchParams(search).getAll('group');
   if(!values.length)return {id:null,invalid:false};

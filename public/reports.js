@@ -1,6 +1,7 @@
 import { REPORT_COLUMNS, reportNumber, reportCsv } from './report-model.js';
 import { createPracticeApi } from './practice.js';
-import { parseGroupContext, groupApiPath, applyGroupContext } from './group-context.js';
+import { parseGroupContext, groupApiPath, applyGroupContext, redirectDefaultGroup } from './group-context.js';
+const redirecting=redirectDefaultGroup(window.location,window.ATTENDANCE_CONFIG);
 const linkGroup=parseGroupContext(window.location.search);applyGroupContext(linkGroup,document);
 const $ = id=>document.getElementById(id);
 const base = String(window.ATTENDANCE_CONFIG?.apiBase ?? '').replace(/\/$/,'');
@@ -85,4 +86,4 @@ $('report-refresh').onclick=load;
 $('report-retry').onclick=()=>state.meta?load():start();
 $('report-download').onclick=()=>{if(!state.report)return;const url=URL.createObjectURL(new Blob([reportCsv(state.report)],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download=`聚會報表-${state.source}-${state.report.group.key.replace(':','-')}-${state.week}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);};
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
-start();
+if(!redirecting)start();

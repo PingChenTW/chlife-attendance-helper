@@ -1,8 +1,9 @@
 import { changesFor, mergeDesired, allDesiredConfirmed, districtScopes } from './model.js';
 import { createPracticeApi } from './practice.js';
 import { selectionKey, readSelected, saveSelected, selectedMembers, addPeopleMembers } from './selection.js';
-import { parseGroupContext, groupApiPath, applyGroupContext } from './group-context.js';
+import { parseGroupContext, groupApiPath, applyGroupContext, redirectDefaultGroup } from './group-context.js';
 
+const redirecting=redirectDefaultGroup(window.location,window.ATTENDANCE_CONFIG);
 const linkGroup=parseGroupContext(window.location.search);applyGroupContext(linkGroup,document);
 
 const $ = id => document.getElementById(id);
@@ -237,5 +238,5 @@ $('add-done').onclick = () => $('add-dialog').close();
 $('submit-button').onclick = submit;
 window.addEventListener('beforeunload', event => { if (state.drafts.size || state.busy) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('online', connection); window.addEventListener('offline', connection);
-connection(); start();
+connection(); if(!redirecting)start();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
