@@ -4,6 +4,10 @@
 
 **[開啟一起點名](https://pingchentw.github.io/chlife-attendance-helper/)**
 
+原網址與未指定大組的報表網址會自動進入[第六大組](https://pingchentw.github.io/chlife-attendance-helper/?group=6)。正式後端以 `DEFAULT_GROUP=6` 共用第六入口的服務、點名排程與報表，不另保存原首頁的舊帳號帳密。其餘 `?group=1` ～ `?group=8` 專屬連結照原指定的大組使用。
+
+**[維護手冊：入口、帳密、檔案位置與部署檢查](MAINTENANCE.md)**
+
 **[修改基數：開啟唯一基數表](baselines.csv)** · [修改與套用步驟](#基數管理)
 
 **[系統架構圖（互動版）](https://pingchentw.github.io/chlife-attendance-helper/architecture.html)** · [PNG 圖檔](public/architecture.png) · [SVG 向量圖](public/architecture.svg)
@@ -55,15 +59,13 @@ npm run build
 | 變數 | 用途 |
 | --- | --- |
 | APP_MODE | live |
-| CHLIFE_CHURCH_ID | 原網站召會 ID |
-| CHLIFE_ACCOUNT | 原網站帳號，機密設定 |
-| CHLIFE_PASSWORD | 原網站密碼，機密設定 |
+| DEFAULT_GROUP | 目前為 6；原首頁與未指定大組 API 共用第六入口，必須在 GROUP_LINKS_JSON 中存在 |
+| GROUP_LINKS_JSON | 八大組帳號與入口設定，僅存 Render 機密設定；格式見下方「大組專屬連結」 |
 | ALLOW_WRITES | 預設 false；指定真實測試紀錄驗證後才設 true |
 | HOST | 主機對外服務通常用 0.0.0.0 |
 | PORT | 由主機平台提供；本機預設 4173 |
 | ALLOWED_ORIGINS | GitHub Pages 等前端的完整來源，例如 https://USERNAME.github.io；逗號分隔 |
 | SNAPSHOT_SECRET | 建議設定固定、隨機且至少 32 字元的機密簽章金鑰 |
-| CHLIFE_DEVICE_TOKEN | 選用，固定的隨機裝置識別碼 |
 
 ```sh
 node --env-file=.env src/server.mjs
@@ -93,7 +95,7 @@ Pages 只能提供介面，不能代替保存網站帳密的後端。
 - [唯一基數表](baselines.csv) 以「年度＋召會 ID＋大組／小區＋區域 ID」辨識資料，名稱僅供閱讀，不以同名套用基數；同一召會、同一區域在不同帳號下共用相同基數。未設定時仍顯示人數，相關比率為「—」。
 - 沒有另設報表資料庫。「8＋1」報表在同一帳號的後端記憶體共用最多 60 秒的彙總快照，切換範圍不再重複查原站；畫面顯示快照的原始資料時間，避免誤認為即時更新。這是為處理原網站已實際回覆的 429 報表頻率限制。報表 API 與姓名一樣不進入 Service Worker／localStorage；不將人名存入彙總快照。
 
-保留目前點名使用的 `CHLIFE_*` 設定。之後可在 **Render 的機密環境變數** `REPORT_ACCOUNTS_JSON` 加入最多八個額外唯讀報表來源。此欄位是 JSON 陣列，每筆結構如下，以下全為佔位文字：
+目前正式部署統一使用 `GROUP_LINKS_JSON` 中的八大組帳號，不需要另設 `CHLIFE_ACCOUNT`、`CHLIFE_PASSWORD`、`CHLIFE_DEVICE_TOKEN` 或 `CHLIFE_CHURCH_ID`。`DEFAULT_GROUP` 若無效或未配置對應入口，後端會停止啟動，不會改用舊帳號。後續若另行部署獨立的單帳號服務，仍保留 `REPORT_ACCOUNTS_JSON` 額外唯讀報表來源窗口；它不會取代目前八大組入口的來源設定。此欄位是 JSON 陣列，每筆結構如下，以下全為佔位文字：
 
 ```json
 [{"key":"source-2","label":"第二個服事範圍","churchId":49,"account":"由管理者填入","password":"只填在 Render 機密設定","deviceToken":"每個來源獨立且固定的識別碼"}]
