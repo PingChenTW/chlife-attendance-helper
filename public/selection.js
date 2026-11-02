@@ -33,6 +33,50 @@ export function saveSelected(storage, key, selected) {
     storage.setItem(key, JSON.stringify({ version: 1, ids: [...selected] })); return true;
   } catch { return false; }
 }
+// A missing record means first use. An existing empty record means the user chose an empty list.
+export class SelectionStore {
+  constructor(storage) { this.storage = storage; this.session = new Map(); }
+  load(meta, scope, audience = 'all') {
+    const key = selectionKey(meta, scope, audience);
+    const persisted = loadSelected(this.storage, meta, scope, audience);
+    return new Set(this.session.get(key) ?? persisted);
+  }
+  has(meta, scope, audience = 'all') {
+    const key = selectionKey(meta, scope, audience);
+    if (this.session.has(key)) return true;
+    try {
+      if (this.storage?.getItem(key) != null) return true;
+      // A recoverable original homepage list is also an existing user choice, even if copying is blocked.
+      return meta.mode === 'live' && meta.siteKey === 'group-6' &&
+        decodeSelected(this.storage?.getItem(selectionKey({ ...meta, siteKey: undefined }, scope, audience))) !== null;
+    } catch { return false; }
+  }
+  save(meta, scope, audience, selected) {
+    const key = selectionKey(meta, scope, audience);
+    this.session.set(key, new Set(selected));
+    return saveSelected(this.storage, key, selected);
+  }
+  async initialize({ meta, query, roster, readRoster, isCurrent = () => true }) {
+    const existing = () => ({ initialized: false, selected: this.load(meta, query.scope, query.audience) });
+    this.load(meta, query.scope, query.audience); // Preserve the original-homepage migration before considering defaults.
+    if (this.has(meta, query.scope, query.audience)) return existing();
+    const previous = meta.weeks?.[1];
+    if (!previous) return existing();
+    // "上週" always means the server-provided previous calendar week, even when viewing that week.
+    const source = query.week === previous.key ? roster : await readRoster({ ...query, week: previous.key });
+    if (!isCurrent()) return { cancelled: true };
+    if (this.has(meta, query.scope, query.audience)) return existing();
+    if (!Array.isArray(source?.members) || source.week !== previous.key || source.scope !== query.scope ||
+        source.meeting !== query.meeting || source.audience !== query.audience) {
+      throw new Error('無法確認上週名單的範圍，請重新讀取。');
+    }
+    const allowed = new Set(roster.members.map(member => member.id));
+    const selected = new Set(source.members.filter(member => member.attended === true &&
+      Number.isSafeInteger(member.id) && member.id > 0 && allowed.has(member.id)).map(member => member.id));
+    const saved = this.save(meta, query.scope, query.audience, selected);
+    return { initialized: true, selected, saved };
+  }
+}
 export function selectedMembers(roster, selected) {
   const byId = new Map((roster?.members ?? []).map(member => [member.id, member]));
   return [...selected].map(id => byId.get(id)).filter(Boolean);

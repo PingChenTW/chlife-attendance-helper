@@ -1,6 +1,6 @@
 import { changesFor, mergeDesired, allDesiredConfirmed, districtScopes } from './model.js';
 import { createPracticeApi } from './practice.js';
-import { selectionKey, loadSelected, saveSelected, selectedMembers, addPeopleMembers } from './selection.js';
+import { SelectionStore, selectedMembers, addPeopleMembers } from './selection.js';
 import { parseGroupContext, groupApiPath, applyGroupContext, redirectDefaultGroup } from './group-context.js';
 
 const redirecting=redirectDefaultGroup(window.location,window.ATTENDANCE_CONFIG);
@@ -36,7 +36,8 @@ function renderMeetingOptions() {
   $('meeting-select').replaceChildren(...availableMeetings().map(meeting => { const option = document.createElement('option'); option.value = meeting.key; option.textContent = meeting.label; return option; }));
 }
 function phoneStorage() { try { return window.localStorage; } catch { return null; } }
-function loadSelection() { state.selected = loadSelected(phoneStorage(), state.meta, state.query.scope, state.query.audience); }
+const selections = new SelectionStore(phoneStorage());
+function loadSelection() { state.selected = selections.load(state.meta, state.query.scope, state.query.audience); }
 function rosterActionLabel() {
   const count = state.roster ? selectedMembers(state.roster, state.selected).length : state.selected.size;
   return count ? '編輯名單' : '加入名單';
@@ -56,7 +57,7 @@ function renderRoster() {
   const actionLabel = rosterActionLabel();
   $('add-button').textContent = actionLabel;
   $('add-title').textContent = actionLabel;
-  $('roster-caption').textContent = `先按「${actionLabel}」選人，再點姓名並送出點名。`;
+  $('roster-caption').textContent = state.selected.size ? `點姓名，再按「送出點名」。要增減人員請按「${actionLabel}」。` : `先按「${actionLabel}」選人，再點姓名並送出點名。`;
   const changes = state.roster ? changesFor(state.roster, state.drafts) : [];
   const added = changes.filter(c => c.attended).length, removed = changes.length - added;
   $('pending-count').textContent = changes.length ? `${changes.length} 筆待送出` : state.lastSaved ? '已儲存完成' : '尚未修改';
@@ -135,7 +136,7 @@ function renderAddPeople() {
       if (selected && state.drafts.has(member.id) && !window.confirm('這個人的點名尚未送出。要放棄修改，並從這支手機的名單移除嗎？')) return;
       if (selected) { state.selected.delete(member.id); state.drafts.delete(member.id); }
       else state.selected.add(member.id);
-      const saved = saveSelected(phoneStorage(), selectionKey(state.meta, state.query.scope, state.query.audience), state.selected);
+      const saved = selections.save(state.meta, state.query.scope, state.query.audience, state.selected);
       $('add-message').textContent = saved ? (selected ? '已從這支手機的名單移除。' : '已加入，並保存在這支手機。') : '這個瀏覽器目前無法保存名單，關閉後可能需要重新加入。';
       $('add-message').classList.toggle('storage-error', !saved);
       renderRoster(); renderAddPeople();
@@ -152,13 +153,27 @@ function openAddPeople() {
 }
 async function loadRoster({ preserve = false } = {}) {
   const seq = ++state.seq; state.loading = true; state.lastSaved = false;
+  const query = { ...state.query };
   const desired = preserve ? new Map(state.drafts) : new Map();
   if (!preserve) { state.roster = null; state.drafts.clear(); }
   notice(''); renderControls(); renderRoster();
   try {
-    const roster = await api('/api/roster?' + new URLSearchParams(state.query));
+    const roster = await api('/api/roster?' + new URLSearchParams(query));
     if (seq !== state.seq) return;
     state.roster = roster; state.drafts = mergeDesired(roster, desired);
+    try {
+      if (!selections.has(state.meta, query.scope, query.audience)) notice('正在帶入上週名單…');
+      const result = await selections.initialize({ meta: state.meta, query, roster,
+        readRoster: source => api('/api/roster?' + new URLSearchParams(source)), isCurrent: () => seq === state.seq });
+      if (seq !== state.seq || result.cancelled) return;
+      state.selected = result.selected;
+      if (result.initialized) notice(result.saved
+        ? result.selected.size ? '已帶入上週名單，並保存在這支手機。可按「編輯名單」調整；出席請依所選週次的實際情形點選。' : '上週這個聚會沒有可帶入的人名，請按「加入名單」選人。'
+        : '已帶入上週名單供本次使用，但瀏覽器無法保存；關閉後可能需要重新加入。', !result.saved);
+    } catch {
+      if (seq !== state.seq) return;
+      notice('已讀取目前名單，但暫時無法帶入上週人名。可按「加入名單」選人，或按「重新讀取」。', true, true);
+    }
     if (preserve && desired.size) notice(state.drafts.size ? '已讀取最新名單。保留的修改仍需按「送出點名」。' : allDesiredConfirmed(roster, desired) ? '已確認修改符合目前的儲存狀態。' : '名單或權限已變動，部分修改無法保留，請核對後重新點名。', !state.drafts.size && !allDesiredConfirmed(roster, desired));
   } catch (error) { if (seq === state.seq) notice(error.message, true, true); }
   finally { if (seq === state.seq) { state.loading = false; renderControls(); renderRoster(); } }
