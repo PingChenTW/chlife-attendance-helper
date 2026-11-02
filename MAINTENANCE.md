@@ -35,6 +35,7 @@
 
 | 要修改的內容 | 檔案／設定 |
 | --- | --- |
+| 可分享的手機使用說明 | [public/help.html](public/help.html)、[public/help.css](public/help.css)、[public/help.js](public/help.js)；公開網址 `/help.html`，可選帶 `?group=1` ～ `8` 保留大組，沒有名單 API 呼叫 |
 | 所有年度、大組、小區基數 | 唯一資料表 [baselines.csv](baselines.csv) |
 | 群組帳號、點名權限與來源分流 | Render 的 `GROUP_LINKS_JSON`；程式 [src/group-links.mjs](src/group-links.mjs) |
 | 後端預設入口與 API 別名 | `DEFAULT_GROUP`；[src/server.mjs](src/server.mjs) 的 `configuredRuntime` |
@@ -43,7 +44,7 @@
 | 手機自選名單與首次帶入 | [public/selection.js](public/selection.js) 的 `SelectionStore`，按手機／入口／小區／一般或兒童保存 ID；[public/app.js](public/app.js) 在取得目前名單後帶入上週人名 |
 | 原網站登入及點名介面 | [src/upstream.mjs](src/upstream.mjs) |
 | 正式週報的八大組與全召會彙總 | [src/church-reports.mjs](src/church-reports.mjs)、[src/reports.mjs](src/reports.mjs) |
-| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v14`；不快取 API、名單或帳密 |
+| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v15`；包含靜態說明頁，不快取 API、名單或帳密 |
 | 自動測試與 Pages 發布 | [.github/workflows/pages.yml](.github/workflows/pages.yml) |
 
 若日後更換預設大組，要同時調整 Render 的 `DEFAULT_GROUP` 與 `scripts/build.mjs` 的正式前端預設值；測試也要一併更新。不要只改首頁文字。
