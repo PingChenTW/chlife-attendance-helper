@@ -1,12 +1,12 @@
 import { ensure } from './errors.mjs';
 import { MEETINGS, CHILD_MEETINGS } from './scopes.mjs';
 
-const FIELDS = ['attendanceViews', 'reportViews', 'rosterReads', 'reportReads', 'submissions', 'confirmedBatches', 'unconfirmedBatches', 'confirmedChanges', 'failures'];
-const MEETING_LABELS = new Map([...MEETINGS, ...CHILD_MEETINGS].map(([key, label]) => [key, label]));
+export const FIELDS = ['attendanceViews', 'reportViews', 'rosterReads', 'reportReads', 'submissions', 'confirmedBatches', 'unconfirmedBatches', 'confirmedChanges', 'failures'];
+export const MEETING_LABELS = new Map([...MEETINGS, ...CHILD_MEETINGS].map(([key, label]) => [key, label]));
 const NUMERALS = ['', '一', '二', '三', '四', '五', '六', '七', '八'];
 const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' });
-const dayKey = date => formatter.format(date);
-const shift = (day, offset) => new Date(new Date(day + 'T00:00:00Z').getTime() + offset * 86400000).toISOString().slice(0, 10);
+export const dayKey = date => formatter.format(date);
+export const shift = (day, offset) => new Date(new Date(day + 'T00:00:00Z').getTime() + offset * 86400000).toISOString().slice(0, 10);
 const empty = () => Object.fromEntries(FIELDS.map(field => [field, 0]));
 const add = (target, source) => { for (const key of FIELDS) target[key] += source[key]; };
 
@@ -62,7 +62,7 @@ export class UsageStatistics {
     if (this.submitted.size >= 8000) this.submitted.delete(this.submitted.keys().next().value);
     this.submitted.set(key, this.now().getTime() + 30 * 60000);
     this.record(group, { submissions: 1, confirmedBatches: result.status === 'confirmed' ? 1 : 0,
-      unconfirmedBatches: result.status === 'confirmed' ? 0 : 1, confirmedChanges: result.confirmed }, meeting);
+      unconfirmedBatches: result.status === 'confirmed' ? 0 : 1, confirmedChanges: result.confirmed }, meeting, key);
   }
   summary({ period = '7d', group = 'all' } = {}) {
     const periods = { today: 1, '7d': 7, '30d': 30 };

@@ -10,6 +10,7 @@ import { ReportService, configuredReportSources } from './reports.mjs';
 import { configuredGroups } from './group-links.mjs';
 import { groupManifest } from '../public/group-context.js';
 import { UsageStatistics } from './usage.mjs';
+import { configuredUsage } from './persistent-usage.mjs';
 
 const PUBLIC = path.resolve(fileURLToPath(new URL('../public/', import.meta.url)));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
@@ -48,7 +49,7 @@ export function createApp({ service, reports = new ReportService(configuredRepor
         const quota = { write: 15, read: 120, usageEvent: 240, usageRead: 60 }[kind];
         if (counter[kind] > quota) { res.setHeader('Retry-After', String(Math.ceil((counter.reset - now) / 1000))); throw new AppError(429, 'RATE_LIMIT', '操作較頻繁，請稍後再試。'); }
         if (url.pathname === '/api/usage/summary' && req.method === 'GET') {
-          json(200, usage.summary({ period: url.searchParams.get('period') ?? '7d', group: url.searchParams.get('group') ?? 'all' })); return;
+          json(200, await usage.summary({ period: url.searchParams.get('period') ?? '7d', group: url.searchParams.get('group') ?? 'all' })); return;
         }
         if (url.pathname === '/api/usage/events' && req.method === 'POST') {
           ensure(req.headers['content-type']?.split(';')[0].trim() === 'application/json' && req.headers['x-usage-client'] === '1', 415, 'JSON_REQUIRED', '使用統計事件格式不正確。');
@@ -131,9 +132,10 @@ export function configuredRuntime(env = {}, { mode = env.APP_MODE ?? 'demo', now
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   const mode = process.argv.includes('--demo') ? 'demo' : (process.env.APP_MODE ?? 'demo');
   const runtime = configuredRuntime(process.env, { mode });
-  const server = createApp({ ...runtime, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean) });
+  const usage = configuredUsage(process.env, { groups: [...runtime.groups.keys()], mode });
+  const server = createApp({ ...runtime, usage, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean) });
   server.requestTimeout = 60000; server.headersTimeout = 15000;
   const port = Number(process.env.PORT ?? 4173), host = process.env.HOST ?? '127.0.0.1';
   server.listen(port, host, () => console.log(`Attendance helper: http://${host}:${port} (${mode}, writes ${runtime.service.allowWrites ? 'enabled' : 'disabled'})`));
-  process.on('SIGTERM', () => server.close());
+  process.once('SIGTERM', () => { server.close(); void usage.flush?.(); });
 }

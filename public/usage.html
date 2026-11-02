@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#365d50"><title>使用統計 · 一起點名</title>
   <meta name="description" content="查看一起點名工具各大組的開啟、名單查詢、點名送出與報表查詢次數。">
-  <meta property="og:title" content="一起點名｜工具使用統計"><meta property="og:description" content="各大組操作情形，手機即可查看。免費試用統計，自本次主機啟動後累計。">
+  <meta property="og:title" content="一起點名｜工具使用統計"><meta property="og:description" content="各大組操作情形，手機即可查看。只記錄匿名操作次數。">
   <meta property="og:image" content="https://pingchentw.github.io/chlife-attendance-helper/icon-512.png">
   <link rel="icon" href="./icon.svg"><link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./usage.css">
   <script src="./config.js" defer></script><script src="./usage.js" type="module"></script>
@@ -14,7 +14,7 @@
     <header class="app-header"><a class="brand" href="./usage.html" aria-label="使用統計首頁"><span class="brand-mark" aria-hidden="true">↗</span><span>一起點名<small>工具使用統計</small></span></a><a class="usage-back" href="./">點名工具 →</a></header>
     <main>
       <section class="usage-intro"><p class="eyebrow">免登入 · 公開彙總</p><h1>工具用了多少次？</h1><p>查看各大組的操作情形。</p></section>
-      <p class="usage-trial">免費試用版：只累計本次主機啟動後的資料，<strong>主機重啟後歸零</strong>。</p>
+      <p id="usage-storage" class="usage-trial">正在確認統計保存狀態…</p>
       <section class="selection-card usage-filters" aria-label="統計範圍">
         <div id="usage-periods" class="week-switch" role="group" aria-label="統計期間"><button class="week-button" data-period="today" aria-pressed="false">今天</button><button class="week-button" data-period="7d" aria-pressed="true">近七日</button><button class="week-button" data-period="30d" aria-pressed="false">近三十日</button></div>
         <label class="field-label" for="usage-group">大組入口</label><div class="select-wrap"><select id="usage-group"><option value="all">全部大組</option></select><span aria-hidden="true">⌄</span></div>
@@ -26,12 +26,14 @@
         <p id="usage-range" class="usage-range"></p>
         <div class="usage-cards" id="usage-cards"></div>
         <p id="usage-outcomes" class="usage-outcomes"></p>
+        <p id="usage-lifetime" class="notice" hidden></p>
+        <p id="usage-sync" class="notice" hidden></p>
         <p id="usage-empty" class="empty-state" hidden>這個範圍還沒有收到使用紀錄。</p>
         <section class="usage-section" aria-labelledby="trend-title"><h2 id="trend-title">每天開啟情形</h2><p class="usage-note">點名頁＋報表頁的開啟次數；「—」是統計尚未啟用的日期。</p><ol id="usage-trend" class="usage-trend"></ol></section>
         <section class="usage-section" aria-labelledby="groups-title"><h2 id="groups-title">各大組使用情形</h2><p class="usage-note">按使用的入口歸類，報表可能查詢其他大組。</p><div class="usage-table-wrap"><table id="usage-groups"><caption class="sr-only">各入口點名頁開啟、送出批次與報表查詢次數</caption><thead><tr><th scope="col">入口</th><th scope="col">點名頁</th><th scope="col">送出</th><th scope="col">報表</th></tr></thead><tbody></tbody></table></div></section>
         <details class="usage-details"><summary>查看各聚會操作</summary><p class="usage-note">名單查詢包含切換、重新讀取與首次帶入；送出是已完成處理的批次。</p><div class="usage-table-wrap"><table id="usage-meetings"><thead><tr><th scope="col">聚會</th><th scope="col">名單查詢</th><th scope="col">送出批次</th></tr></thead><tbody></tbody></table></div></details>
         <details class="usage-details"><summary>這些數字怎麼算？</summary><div class="usage-definitions"><p><strong>點名頁開啟：</strong>新版程式成功初始化後回報；同一人重開可再次計數，不代表使用人數。</p><p><strong>名單查詢：</strong>後端成功提供一次名單的次數，包含切換聚會、重新讀取及首次帶入。</p><p><strong>送出批次：</strong>收到有效點名並完成處理計一次，包含部分成功或尚待確認。同一批重送在短期內不重複計數。</p><p><strong>確認修改：</strong>後端回查已符合目標的修改筆數，含新增與取消；不能當作出席人數。</p><p><strong>報表查詢：</strong>成功取得一次週報的次數，含使用快照；報表頁開啟另列。查看本統計頁不列入次數。</p><p>只記錄更新後已收到的操作，可能因舊版本、斷線或阻擋回報而漏計。沒有姓名、出席名單、定位或使用者識別碼。</p></div></details>
-        <footer class="usage-footer"><p id="usage-started"></p><p id="usage-updated"></p><p>最多保留本次啟動期間的近三十日彙總，沒有歷史補登。知道網址的人都能查看。</p></footer>
+        <footer class="usage-footer"><p id="usage-started"></p><p id="usage-updated"></p><p id="usage-retention"></p><p>知道網址的人都能查看。無法補回啟用前或未成功收到的操作。</p></footer>
       </section>
     </main>
     <noscript>請開啟 JavaScript，以讀取使用統計。</noscript>

@@ -19,7 +19,7 @@
 
 每個入口只點名本大組。報表經原站權限確認後提供八大組＋全召會，預設自己的大組。免登入入口可由知道網址的人使用；網址分流不是身分驗證。
 
-[獨立手機使用統計](https://pingchentw.github.io/chlife-attendance-helper/usage.html) 也可由知道網址的人查看，只提供操作次數。這是使用者選定的免費試用版，自本次主機啟動後累計、重啟歸零；細節與 API 見 [USAGE.md](USAGE.md)。
+[獨立手機使用統計](https://pingchentw.github.io/chlife-attendance-helper/usage.html) 也可由知道網址的人查看，只提供操作次數。使用者已改選 Upstash 免費資料庫持續保存；已存入資料跨 Render 重啟保留。無資料庫設定時才是重啟歸零的記憶體試用；細節與 API 見 [USAGE.md](USAGE.md)。
 
 ## 帳密與預設入口
 
@@ -39,7 +39,7 @@
 
 | 要修改的內容 | 檔案／設定 |
 | --- | --- |
-| 使用統計 | [src/usage.mjs](src/usage.mjs)、[public/usage-client.js](public/usage-client.js)、[public/usage.html](public/usage.html)、[usage.css](public/usage.css)、[usage.js](public/usage.js)；路由在 server.mjs，完整計數口徑見 [USAGE.md](USAGE.md) |
+| 使用統計 | [src/usage.mjs](src/usage.mjs)、[persistent-usage.mjs](src/persistent-usage.mjs)、[usage-store.mjs](src/usage-store.mjs)、[public/usage.html](public/usage.html)；UI／API、機密設定、持久格式與計數口徑見 [USAGE.md](USAGE.md) |
 | 可分享的手機使用說明 | [public/help.html](public/help.html)、[public/help.css](public/help.css)、[public/help.js](public/help.js)；公開網址 `/help.html`，可選帶 `?group=1` ～ `8` 保留大組，沒有名單 API 呼叫 |
 | 所有年度、大組、小區基數 | 唯一資料表 [baselines.csv](baselines.csv) |
 | 群組帳號、點名權限與來源分流 | Render 的 `GROUP_LINKS_JSON`；程式 [src/group-links.mjs](src/group-links.mjs) |
@@ -49,7 +49,7 @@
 | 手機自選名單與首次帶入 | [public/selection.js](public/selection.js) 的 `SelectionStore`，一般按手機／入口／小區／聚會保存 ID，兒童維持按小區另存；[public/app.js](public/app.js) 切換聚會時切換名單，首次讀該聚會上週出席 |
 | 原網站登入及點名介面 | [src/upstream.mjs](src/upstream.mjs) |
 | 正式週報的八大組與全召會彙總 | [src/church-reports.mjs](src/church-reports.mjs)、[src/reports.mjs](src/reports.mjs) |
-| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v17`；包含靜態說明及統計介面，不快取 API、名單或帳密 |
+| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v18`；包含靜態說明及統計介面，不快取 API、名單或帳密 |
 | 自動測試與 Pages 發布 | [.github/workflows/pages.yml](.github/workflows/pages.yml) |
 
 若日後更換預設大組，要同時調整 Render 的 `DEFAULT_GROUP` 與 `scripts/build.mjs` 的正式前端預設值；測試也要一併更新。不要只改首頁文字。
@@ -69,7 +69,7 @@
 
 ## 問題排查與回復
 
-- 使用統計歸零：先看統計啟動時間，重啟或重新部署後歸零是本試用版既定行為，不代表點名或手機自選名單被清除。統計頁不計入使用次數，也沒有自動輪詢。若統計讀取失敗仍可使用點名；若 API 找不到，核對 Render 已部署新模組，勿只更新 Pages。
+- 使用統計歸零：先核對相同期間／入口及 API `storage`。正式應是 `redis`；若變成 `memory`，檢查 Render 的 `USAGE_REDIS_REST_URL`／`USAGE_REDIS_REST_TOKEN` 是否遺失或回退舊版。不能把資料庫連不上當零，不能清庫重來。若出現待同步、讀取錯誤，依 [USAGE.md](USAGE.md) 查額度、封存及連線。統計失敗仍可點名，不清手機資料、不重送出席。
 - 舊共用名單升級：一般七項各自增加 `:meeting:聚會代碼` 儲存後綴。`SelectionStore.migrateMeetings` 先承接原有共用 ID，再一次複製到所有尚未有名單的一般聚會鍵；保留舊副本，不覆蓋已有目的鍵，空名單也保留。修改任何新名單都不回寫舊共用鍵，不影響另外六項。兒童沒有新增 meeting 後綴，維持原規則。
 - 首次帶入：`SelectionStore.initialize` 先承接舊資料，只在對應儲存鍵與當次工作階段均未初始化時執行。來源為 `meta.weeks[1]`、相同小區／聚會／一般或兒童，與目前名單取 ID 交集；只挑選人名，不修改原站出席。檢視上週重用目前名單，其他情況額外一次名單 API。成功空結果也保存，已有的空／非空／損壞紀錄均不覆蓋。失敗允許重試，遲到回應不能覆蓋選擇。無法保存時僅留當次工作階段並明確提醒，沒有新增雲端資料庫。
 - 自選名單像是消失：先確認是否從桌面網頁 App 改為 LINE／Safari／Chrome，這些環境可能不共用本機儲存空間。同一台手機不代表同一份名單；先回原先加入名單的環境、選相同小區及一般／兒童種類核對，不要先刪除捷徑、清除資料或重裝。現在同一瀏覽環境的原首頁與 `?group=6` 會共用六大組儲存鍵。`loadSelected` 只在六大組的新鍵不存在時承接舊首頁對應鍵，保留原副本；已有新鍵，即使名單為空也不覆蓋。此機制不做跨 App 同步。
