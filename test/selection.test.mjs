@@ -5,7 +5,8 @@ import { selectionKey, readSelected, loadSelected, saveSelected, selectedMembers
 function phone() { const data = new Map(); return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value), data }; }
 const meta = { mode: 'live', church: '測試召會' };
 
-const seedMeta = { ...meta, siteKey: 'group-6', weeks: [{ key: 'current' }, { key: 'previous' }] };
+const generalMeetings = ['sunday','home-out','home-in','group','prayer','reading','gospel'].map(key => ({ key }));
+const seedMeta = { ...meta, siteKey: 'group-6', meetings: generalMeetings, weeks: [{ key: 'current' }, { key: 'previous' }] };
 const seedQuery = { week: 'current', scope: 'district', meeting: 'sunday', audience: 'all' };
 const seedRoster = { ...seedQuery, members: [{ id: 1, attended: false }, { id: 2, attended: true }, { id: 3, attended: false }] };
 const previousRoster = { ...seedQuery, week: 'previous', members: [{ id: 1, attended: true }, { id: 2, attended: false }, { id: 3, attended: true }, { id: 99, attended: true }] };
@@ -18,15 +19,15 @@ test('first use seeds previous attendees still in the current roster and persist
   } });
   assert.equal(result.initialized, true); assert.equal(result.saved, true); assert.equal(calls, 1);
   assert.deepEqual([...result.selected], [1, 3]); assert.deepEqual(seedRoster, original);
-  assert.deepEqual(JSON.parse(storage.getItem(selectionKey(seedMeta, seedQuery.scope))), { version: 1, ids: [1, 3] });
+  assert.deepEqual(JSON.parse(storage.getItem(selectionKey(seedMeta, seedQuery.scope, 'all', seedQuery.meeting))), { version: 1, ids: [1, 3] });
   const reloaded = new SelectionStore(storage);
-  assert.deepEqual([...reloaded.load(seedMeta, seedQuery.scope)], [1, 3]);
+  assert.deepEqual([...reloaded.load(seedMeta, seedQuery.scope, 'all', seedQuery.meeting)], [1, 3]);
   assert.equal((await reloaded.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, readRoster: () => assert.fail('must not reread') })).initialized, false);
 });
 
 test('saved populated, deliberately empty and damaged selections are never automatically replaced', async () => {
   for (const value of [{ version: 1, ids: [2] }, { version: 1, ids: [] }, '{broken']) {
-    const storage = phone(), selections = new SelectionStore(storage), key = selectionKey(seedMeta, seedQuery.scope);
+    const storage = phone(), selections = new SelectionStore(storage), key = selectionKey(seedMeta, seedQuery.scope, 'all', seedQuery.meeting);
     storage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
     const original = storage.getItem(key);
     const result = await selections.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, readRoster: () => assert.fail('must not reread') });
@@ -34,11 +35,83 @@ test('saved populated, deliberately empty and damaged selections are never autom
   }
 });
 
-test('an empty successful default is remembered across reload and changes of meeting', async () => {
+test('an empty default is remembered for that meeting while a different meeting seeds independently', async () => {
   const storage = phone(), selections = new SelectionStore(storage);
   const result = await selections.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, readRoster: async () => ({ ...previousRoster, members: [] }) });
   assert.equal(result.initialized, true); assert.equal(result.selected.size, 0);
-  await new SelectionStore(storage).initialize({ meta: seedMeta, query: { ...seedQuery, meeting: 'prayer' }, roster: seedRoster, readRoster: () => assert.fail('must not reread') });
+  const reloaded = new SelectionStore(storage);
+  await reloaded.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, readRoster: () => assert.fail('must not reread') });
+  const prayer = await reloaded.initialize({ meta: seedMeta, query: { ...seedQuery, meeting: 'prayer' }, roster: { ...seedRoster, meeting: 'prayer' }, readRoster: async () => ({ ...previousRoster, meeting: 'prayer' }) });
+  assert.equal(prayer.initialized, true); assert.deepEqual([...prayer.selected], [1, 3]);
+  assert.equal(reloaded.load(seedMeta, seedQuery.scope, 'all', 'sunday').size, 0);
+});
+
+test('the seven general meetings seed from their own previous-week attendance and retain independent edits', async () => {
+  const storage = phone(), selections = new SelectionStore(storage), calls = [];
+  for (const [index, { key: meeting }] of generalMeetings.entries()) {
+    const result = await selections.initialize({ meta: seedMeta, query: { ...seedQuery, meeting }, roster: { ...seedRoster, meeting }, readRoster: async query => {
+      calls.push(query); return { ...previousRoster, meeting, members: seedRoster.members.map((m, i) => ({ ...m, attended: i === index % 3 })) };
+    } });
+    assert.equal(result.initialized, true); assert.deepEqual([...result.selected], [index % 3 + 1]);
+  }
+  assert.equal(calls.length, 7); assert.ok(calls.every(q => q.week === 'previous'));
+  assert.equal(storage.getItem(selectionKey(seedMeta, seedQuery.scope)), null);
+  selections.save(seedMeta, seedQuery.scope, 'all', new Set(), 'prayer');
+  const reloaded = new SelectionStore(storage);
+  for (const [index, { key: meeting }] of generalMeetings.entries()) {
+    assert.deepEqual([...reloaded.load(seedMeta, seedQuery.scope, 'all', meeting)], meeting === 'prayer' ? [] : [index % 3 + 1]);
+  }
+});
+
+test('legacy shared choices are copied into all seven lists once without overwriting existing destinations', async () => {
+  const storage = phone(), sharedKey = selectionKey(seedMeta, seedQuery.scope);
+  saveSelected(storage, sharedKey, new Set([2, 3])); const original = storage.getItem(sharedKey);
+  saveSelected(storage, selectionKey(seedMeta, seedQuery.scope, 'all', 'reading'), new Set([1]));
+  storage.setItem(selectionKey(seedMeta, seedQuery.scope, 'all', 'gospel'), '{broken');
+  const selections = new SelectionStore(storage);
+  const result = await selections.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, readRoster: () => assert.fail('existing choice must be retained') });
+  assert.equal(result.initialized, false); assert.deepEqual([...result.selected], [2, 3]);
+  for (const { key } of generalMeetings) {
+    assert.notEqual(storage.getItem(selectionKey(seedMeta, seedQuery.scope, 'all', key)), null);
+    assert.deepEqual([...selections.load(seedMeta, seedQuery.scope, 'all', key)], key === 'reading' ? [1] : key === 'gospel' ? [] : [2, 3]);
+  }
+  assert.equal(storage.getItem(sharedKey), original);
+  selections.save(seedMeta, seedQuery.scope, 'all', new Set(), 'prayer');
+  const reloaded = new SelectionStore(storage);
+  assert.equal(reloaded.load(seedMeta, seedQuery.scope, 'all', 'prayer').size, 0);
+  assert.deepEqual([...reloaded.load(seedMeta, seedQuery.scope, 'all', 'sunday')], [2, 3]);
+  assert.equal(storage.getItem(sharedKey), original);
+});
+
+test('an intentionally empty legacy shared list migrates to seven empty lists without refilling', async () => {
+  const storage = phone(); saveSelected(storage, selectionKey(seedMeta, seedQuery.scope), new Set());
+  const selections = new SelectionStore(storage);
+  await selections.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, readRoster: () => assert.fail('must not refill') });
+  for (const { key } of generalMeetings) assert.deepEqual(JSON.parse(storage.getItem(selectionKey(seedMeta, seedQuery.scope, 'all', key))).ids, []);
+});
+
+test('meeting migration recovers the original sixth homepage without crossing groups, districts or children', () => {
+  const storage = phone(), originalMeta = { ...seedMeta, siteKey: undefined };
+  saveSelected(storage, selectionKey(originalMeta, seedQuery.scope), new Set([1, 2]));
+  saveSelected(storage, selectionKey(seedMeta, seedQuery.scope, 'children'), new Set([3]));
+  const selections = new SelectionStore(storage);
+  assert.deepEqual([...selections.load(seedMeta, seedQuery.scope, 'all', 'prayer')], [1, 2]);
+  assert.deepEqual([...selections.load(seedMeta, seedQuery.scope, 'children', 'children-sunday')], [3]);
+  assert.equal(selectionKey(seedMeta, seedQuery.scope, 'children', 'children-sunday'), selectionKey(seedMeta, seedQuery.scope, 'children', 'children-group'));
+  assert.equal(selections.load({ ...seedMeta, siteKey: 'group-7' }, seedQuery.scope, 'all', 'prayer').size, 0);
+  assert.equal(selections.load(seedMeta, 'other-district', 'all', 'prayer').size, 0);
+  assert.deepEqual([...readSelected(storage, selectionKey(originalMeta, seedQuery.scope))], [1, 2]);
+});
+
+test('blocked meeting migration retains seven session copies and makes persistence failure explicit', async () => {
+  const storage = phone(); saveSelected(storage, selectionKey(seedMeta, seedQuery.scope), new Set([1, 2]));
+  const selections = new SelectionStore({ getItem: key => storage.getItem(key), setItem: () => { throw new Error('blocked'); } });
+  const result = await selections.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, readRoster: () => assert.fail('must preserve old choice') });
+  assert.equal(result.persistenceFailed, true);
+  selections.save(seedMeta, seedQuery.scope, 'all', new Set([3]), 'prayer');
+  assert.deepEqual([...selections.load(seedMeta, seedQuery.scope, 'all', 'prayer')], [3]);
+  assert.deepEqual([...selections.load(seedMeta, seedQuery.scope, 'all', 'sunday')], [1, 2]);
+  assert.deepEqual([...readSelected(storage, selectionKey(seedMeta, seedQuery.scope))], [1, 2]);
 });
 
 test('viewing last week reuses its roster without asking for an unsupported older week', async () => {
@@ -48,7 +121,7 @@ test('viewing last week reuses its roster without asking for an unsupported olde
 });
 
 test('late defaults cannot save after navigation or overwrite a selection saved during lookup', async () => {
-  const storage = phone(), selections = new SelectionStore(storage), key = selectionKey(seedMeta, seedQuery.scope);
+  const storage = phone(), selections = new SelectionStore(storage), key = selectionKey(seedMeta, seedQuery.scope, 'all', seedQuery.meeting);
   const stale = await selections.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, isCurrent: () => false, readRoster: async () => previousRoster });
   assert.equal(stale.cancelled, true); assert.equal(storage.getItem(key), null);
   const result = await selections.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, readRoster: async () => {
@@ -58,7 +131,7 @@ test('late defaults cannot save after navigation or overwrite a selection saved 
 });
 
 test('failed or mismatched lookups remain retryable instead of saving an empty default', async () => {
-  const storage = phone(), selections = new SelectionStore(storage), key = selectionKey(seedMeta, seedQuery.scope);
+  const storage = phone(), selections = new SelectionStore(storage), key = selectionKey(seedMeta, seedQuery.scope, 'all', seedQuery.meeting);
   const input = { meta: seedMeta, query: seedQuery, roster: seedRoster };
   await assert.rejects(selections.initialize({ ...input, readRoster: async () => { throw new Error('offline'); } }), /offline/);
   assert.equal(storage.getItem(key), null);
@@ -70,9 +143,9 @@ test('failed or mismatched lookups remain retryable instead of saving an empty d
 test('blocked storage retains defaults and manual edits for the session and reports persistence failure', async () => {
   const selections = new SelectionStore({ getItem: () => null, setItem: () => { throw new Error('blocked'); } });
   const result = await selections.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, readRoster: async () => previousRoster });
-  assert.equal(result.saved, false); assert.deepEqual([...selections.load(seedMeta, seedQuery.scope)], [1, 3]);
-  assert.equal(selections.save(seedMeta, seedQuery.scope, 'all', new Set()), false);
-  assert.equal(selections.load(seedMeta, seedQuery.scope).size, 0);
+  assert.equal(result.saved, false); assert.deepEqual([...selections.load(seedMeta, seedQuery.scope, 'all', seedQuery.meeting)], [1, 3]);
+  assert.equal(selections.save(seedMeta, seedQuery.scope, 'all', new Set(), seedQuery.meeting), false);
+  assert.equal(selections.load(seedMeta, seedQuery.scope, 'all', seedQuery.meeting).size, 0);
   await selections.initialize({ meta: seedMeta, query: seedQuery, roster: seedRoster, readRoster: () => assert.fail('must not reread') });
   assert.equal(selections.load(seedMeta, seedQuery.scope, 'children').size, 0);
   assert.equal(selections.load({ ...seedMeta, siteKey: 'group-7' }, seedQuery.scope).size, 0);

@@ -50,13 +50,13 @@
 | --- | --- | --- |
 | 真實帳密、固定 device token、簽章金鑰 | Render 機密環境設定 | 不送到手機，不提交 Git |
 | 原站 access／refresh token | 後端記憶體 | 重啟後重新登入；同來源共用登入流程 |
-| 自選名單 | 每個瀏覽環境的 `localStorage` | 只存人員 ID；沒有雲端、跨手機或跨瀏覽器同步 |
+| 自選名單 | 每個瀏覽環境的 `localStorage` | 一般七項各自保存 ID，兒童另存；沒有雲端、跨手機或跨瀏覽器同步 |
 | 手機暫存的點選修改 | 前端記憶體 `drafts` | 尚未送出時可能因關頁而遺失 |
 | 姓名與目前出席 | API 回應及畫面記憶體 | 不放進 localStorage 或 Service Worker 快取 |
 | 原站正式出席 | 原網站後端 | 送出後回讀確認，該站是正式資料來源 |
 | 彙總報表快照 | 後端每個來源共用的記憶體快取 | 約 60 秒、最多本週與上週；不是持久報表資料庫 |
 | 基數 | Git 的 `baselines.csv` | 啟動時載入，更新後須部署後端 |
-| 離線介面 | Service Worker 公開檔案允許清單 | 目前快取版 `attendance-shell-v15`；不是離線點名佇列 |
+| 離線介面 | Service Worker 公開檔案允許清單 | 目前快取版 `attendance-shell-v16`；不是離線點名佇列 |
 
 ## 檔案與修改入口
 
@@ -83,11 +83,13 @@
 
 ### 手機名單不是出席紀錄
 
-`selectionKey` 使用 `attendance-selected:v1:` 前綴，依 `mode`、`church`、`scope` 編碼，兒童加 `:children`，大組入口加 `:site:group-N`。其中 `church` 使用 API 回傳值，目前為召會名稱，不是直接套用設定中的數字 ID；改欄位或名稱時要考慮儲存鍵相容。值為 `{version:1, ids:[...]}`。同小區、同一般／兒童種類的名單跨週次與聚會沿用；聚會不是儲存鍵的一部分。
+`selectionKey(meta,scope,audience,meeting)` 使用 `attendance-selected:v1:` 前綴，依 `mode`、`church`、`scope` 編碼，兒童加 `:children`，大組入口加 `:site:group-N`；一般傳入 meeting 後再加 `:meeting:聚會代碼`。同小區的七項一般聚會因此各自獨立，每項跨本週／上週沿用；兒童維持原有同小區共用名單，不加 meeting 後綴。其中 `church` 使用 API 回傳值，目前為召會名稱，不是設定中的數字 ID，改名需考慮鍵相容。值仍為 `{version:1, ids:[...]}`。
 
-首次帶入只在鍵不存在，且當次工作階段也尚未初始化時發生：以 `meta.weeks[1]`、同小區及當下聚會的出席人員，和目前名單取 ID 交集；只帶入人名，不帶入出席狀態。看上週時重用該週名單，不查更早一週。成功空結果也保存；失敗不標記成功，允許重試。查詢完成後再次檢查是否切換畫面、是否已有名單，避免遲到回應覆蓋選擇。
+升級的選擇已由使用者確認：`SelectionStore.migrateMeetings` 先讀舊一般共用名單，一次複製到 `meta.meetings` 的七個目的鍵，只補不存在的鍵；非空、空白、損壞的既有目的紀錄均不覆蓋。保留原共用副本，不回寫；各份 Set 分開，之後編輯或清空其中一項不影響其餘項目。舊共用名單為空時也複製七份空名單；沒有舊名單才依各項自己的上週出席初始化。儲存失敗仍保留當次的七份副本並提示，不能假裝已持久保存。
 
-已有名單、刻意清空或損壞的現有紀錄都不自動覆蓋。第六入口僅在新鍵不存在時，承接同瀏覽環境原首頁的對應 ID，保留舊副本；不搬到其他大組。儲存失敗時 `SelectionStore` 當次記憶體保留選擇，並顯示無法保存的提示。
+首次帶入先做上述舊資料承接，只在目的鍵不存在且當次工作階段也尚未初始化時發生：以 `meta.weeks[1]`、同小區及當下聚會的出席人員，和目前名單取 ID 交集；只帶入人名，不帶入出席狀態。看上週時重用該週名單，不查更早一週。成功空結果也保存；失敗不標記成功，允許重試。查詢完成後再次檢查是否切換畫面、是否已有名單，避免遲到回應覆蓋選擇。前端切換 meeting 時要呼叫 `loadSelection`，讀寫時都傳入 meeting，避免只有鍵分開、畫面卻沿用上一份名單。
+
+已有名單、刻意清空或損壞的現有紀錄都不自動覆蓋。第六入口先依舊規則承接同瀏覽環境原首頁的對應 ID，再承接成七項；原首頁副本與後來的共用副本都保留，不搬到其他大組。儲存失敗時 `SelectionStore` 當次記憶體保留選擇，並顯示無法保存的提示。
 
 同一台手機的桌面 PWA、LINE、Safari／Chrome 可能不共用儲存空間；私密瀏覽也不能當持久名單保存。排查先回原環境、相同小區及一般／兒童，不叫使用者刪捷徑、清資料或重裝。
 
@@ -160,7 +162,7 @@ CI 使用 [pages.yml](.github/workflows/pages.yml) 的 Linux 設定，會執行 
 
 | 變更類型 | 優先檢查 |
 | --- | --- |
-| 首次帶入、儲存、舊資料承接 | [selection.test.mjs](test/selection.test.mjs)；瀏覽器首次帶入→編輯→重開→清空→重開，另測兒童與不同入口 |
+| 首次帶入、儲存、舊資料承接 | [selection.test.mjs](test/selection.test.mjs)；七項獨立初始化、舊共用複製七份、目的鍵保護，瀏覽器編輯→換聚會→重開→清空→重開，另測兒童與不同入口 |
 | 原站登入、欄位或權限 | [upstream.test.mjs](test/upstream.test.mjs)、[scopes.test.mjs](test/scopes.test.mjs)；正式驗證先只讀取，不列印個資 |
 | 送出、逾時、部分成功 | [service.test.mjs](test/service.test.mjs)、[model.test.mjs](test/model.test.mjs)；用假的 timeout／readback 測試 |
 | 大組或預設入口 | [group-links.test.mjs](test/group-links.test.mjs)、[http.test.mjs](test/http.test.mjs)；原首頁與六入口相容，其他入口不跨範圍 |
@@ -190,12 +192,15 @@ Render 沒有依 GitHub push 自動部署。完整步驟見 [維護手冊](MAINT
 - 無法和原站其他使用者取得跨系統交易鎖；寫前核對與回讀能降低衝突，不能消除同時修改。
 - 進階總表（受浸、新人、青職等參考表欄位）仍只有 `report-profiles.json` 與 501 窗口；現有 8＋1 週報已上線，二者要分清楚。未來總帳號也要經來源與權限驗證，不任意疊加八帳號造成重複統計。
 - 沒有手機自選名單的雲端備份、跨瀏覽器同步或離線送出功能。
+- 七項獨立名單屬手機儲存及畫面邏輯，原有名單／點名 API 契約沒有改變。回退到舊共用版可能只顯示保留的舊副本，不能據此覆寫新的 `:meeting:` 名單；排查或回退時保留兩套 ID 鍵。
 - 實體 iPhone／Android、實際 LINE 卡片預覽、尖峰併發仍待專項驗證；既有手機尺寸預覽與功能測試不代表這些已通過。
 - Actions 曾顯示部分第三方 action 的 Node runtime 棄用提示；更新 action 版本時另外驗證發布流程，不等同本專案 Node.js 24 執行需求有錯。
 
 ## 最近可供比對的驗證紀錄
 
-2026-11-02 交接整理前的功能基線為 Git 提交 `166533583eacfb59996aadcbf9ddfcc262b0f2aa`，Render 部署 `dep-dbjud4ijnfac7392mlv0` 已顯示 Live。後續請查實際提交，不能永久把這個版本當最新版。
+2026-11-02 七項獨立名單更新：66 項自動測試及正式前端建置通過。假資料瀏覽器驗證包含：舊共用三人複製成七份、只改禱告項目不影響另外六項、清空後重開仍為空、新小區各聚會分別讀取各自上週出席；均沒有送出真實出席。此更新使用 `attendance-shell-v16`，交付時以實際 Git 提交、Actions 與 Render 狀態為準。
+
+交接整理前、可供歷史比對的功能基線為 Git 提交 `166533583eacfb59996aadcbf9ddfcc262b0f2aa`，當時 Render 部署 `dep-dbjud4ijnfac7392mlv0` 顯示 Live。這是舊共用名單版本，不是本次獨立名單的最新版：
 
 - 當時 61 項自動測試與正式前端建置通過；首次帶入、保留編輯／刻意空名單、一般與兒童隔離已有回歸案例。
 - 當時 Pages run 65 顯示 Success；請從 [Actions 清單](https://github.com/PingChenTW/chlife-attendance-helper/actions) 依提交 `1665335` 核對。後續依實際提交查驗，不依賴本機截圖。

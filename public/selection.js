@@ -1,6 +1,6 @@
 // Only member IDs are stored on this device; names and attendance stay in memory.
-export function selectionKey(meta, scope, audience = 'all') {
-  return 'attendance-selected:v1:' + [meta.mode, meta.church, scope].map(encodeURIComponent).join(':') + (audience === 'children' ? ':children' : '') + (meta.siteKey ? ':site:'+encodeURIComponent(meta.siteKey) : '');
+export function selectionKey(meta, scope, audience = 'all', meeting) {
+  return 'attendance-selected:v1:' + [meta.mode, meta.church, scope].map(encodeURIComponent).join(':') + (audience === 'children' ? ':children' : '') + (meta.siteKey ? ':site:'+encodeURIComponent(meta.siteKey) : '') + (audience === 'all' && meeting ? ':meeting:'+encodeURIComponent(meeting) : '');
 }
 function decodeSelected(raw) {
   const data = JSON.parse(raw ?? 'null');
@@ -35,37 +35,54 @@ export function saveSelected(storage, key, selected) {
 }
 // A missing record means first use. An existing empty record means the user chose an empty list.
 export class SelectionStore {
-  constructor(storage) { this.storage = storage; this.session = new Map(); }
-  load(meta, scope, audience = 'all') {
-    const key = selectionKey(meta, scope, audience);
-    const persisted = loadSelected(this.storage, meta, scope, audience);
+  constructor(storage) { this.storage = storage; this.session = new Map(); this.migrated = new Set(); this.unsaved = new Set(); }
+  load(meta, scope, audience = 'all', meeting) {
+    const key = selectionKey(meta, scope, audience, meeting);
+    const separate = audience === 'all' && meeting;
+    if (separate) this.migrateMeetings(meta, scope);
+    const persisted = separate ? readSelected(this.storage, key) : loadSelected(this.storage, meta, scope, audience);
     return new Set(this.session.get(key) ?? persisted);
   }
-  has(meta, scope, audience = 'all') {
-    const key = selectionKey(meta, scope, audience);
+  migrateMeetings(meta, scope) {
+    const sharedKey = selectionKey(meta, scope);
+    if (this.migrated.has(sharedKey)) return;
+    const selected = this.load(meta, scope);
+    if (!this.has(meta, scope)) return;
+    // Preserve the shared list as a backup; copy all seven before any individual list is edited.
+    this.migrated.add(sharedKey);
+    for (const { key: meeting } of meta.meetings ?? []) {
+      if (!this.has(meta, scope, 'all', meeting)) this.save(meta, scope, 'all', selected, meeting);
+    }
+  }
+  has(meta, scope, audience = 'all', meeting) {
+    const key = selectionKey(meta, scope, audience, meeting);
     if (this.session.has(key)) return true;
     try {
       if (this.storage?.getItem(key) != null) return true;
+      if (audience === 'all' && meeting) return false;
       // A recoverable original homepage list is also an existing user choice, even if copying is blocked.
       return meta.mode === 'live' && meta.siteKey === 'group-6' &&
         decodeSelected(this.storage?.getItem(selectionKey({ ...meta, siteKey: undefined }, scope, audience))) !== null;
     } catch { return false; }
   }
-  save(meta, scope, audience, selected) {
-    const key = selectionKey(meta, scope, audience);
+  save(meta, scope, audience, selected, meeting) {
+    const key = selectionKey(meta, scope, audience, meeting);
     this.session.set(key, new Set(selected));
-    return saveSelected(this.storage, key, selected);
+    const saved = saveSelected(this.storage, key, selected);
+    if (saved) this.unsaved.delete(key); else this.unsaved.add(key);
+    return saved;
   }
   async initialize({ meta, query, roster, readRoster, isCurrent = () => true }) {
-    const existing = () => ({ initialized: false, selected: this.load(meta, query.scope, query.audience) });
-    this.load(meta, query.scope, query.audience); // Preserve the original-homepage migration before considering defaults.
-    if (this.has(meta, query.scope, query.audience)) return existing();
+    const key = selectionKey(meta, query.scope, query.audience, query.meeting);
+    const existing = () => ({ initialized: false, selected: this.load(meta, query.scope, query.audience, query.meeting), persistenceFailed: this.unsaved.has(key) });
+    this.load(meta, query.scope, query.audience, query.meeting); // Migrate shared/legacy choices before considering defaults.
+    if (this.has(meta, query.scope, query.audience, query.meeting)) return existing();
     const previous = meta.weeks?.[1];
     if (!previous) return existing();
     // "上週" always means the server-provided previous calendar week, even when viewing that week.
     const source = query.week === previous.key ? roster : await readRoster({ ...query, week: previous.key });
     if (!isCurrent()) return { cancelled: true };
-    if (this.has(meta, query.scope, query.audience)) return existing();
+    if (this.has(meta, query.scope, query.audience, query.meeting)) return existing();
     if (!Array.isArray(source?.members) || source.week !== previous.key || source.scope !== query.scope ||
         source.meeting !== query.meeting || source.audience !== query.audience) {
       throw new Error('無法確認上週名單的範圍，請重新讀取。');
@@ -73,7 +90,7 @@ export class SelectionStore {
     const allowed = new Set(roster.members.map(member => member.id));
     const selected = new Set(source.members.filter(member => member.attended === true &&
       Number.isSafeInteger(member.id) && member.id > 0 && allowed.has(member.id)).map(member => member.id));
-    const saved = this.save(meta, query.scope, query.audience, selected);
+    const saved = this.save(meta, query.scope, query.audience, selected, query.meeting);
     return { initialized: true, selected, saved };
   }
 }

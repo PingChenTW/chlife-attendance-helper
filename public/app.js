@@ -37,7 +37,7 @@ function renderMeetingOptions() {
 }
 function phoneStorage() { try { return window.localStorage; } catch { return null; } }
 const selections = new SelectionStore(phoneStorage());
-function loadSelection() { state.selected = selections.load(state.meta, state.query.scope, state.query.audience); }
+function loadSelection() { state.selected = selections.load(state.meta, state.query.scope, state.query.audience, state.query.meeting); }
 function rosterActionLabel() {
   const count = state.roster ? selectedMembers(state.roster, state.selected).length : state.selected.size;
   return count ? '編輯名單' : '加入名單';
@@ -136,7 +136,7 @@ function renderAddPeople() {
       if (selected && state.drafts.has(member.id) && !window.confirm('這個人的點名尚未送出。要放棄修改，並從這支手機的名單移除嗎？')) return;
       if (selected) { state.selected.delete(member.id); state.drafts.delete(member.id); }
       else state.selected.add(member.id);
-      const saved = selections.save(state.meta, state.query.scope, state.query.audience, state.selected);
+      const saved = selections.save(state.meta, state.query.scope, state.query.audience, state.selected, state.query.meeting);
       $('add-message').textContent = saved ? (selected ? '已從這支手機的名單移除。' : '已加入，並保存在這支手機。') : '這個瀏覽器目前無法保存名單，關閉後可能需要重新加入。';
       $('add-message').classList.toggle('storage-error', !saved);
       renderRoster(); renderAddPeople();
@@ -148,7 +148,8 @@ function renderAddPeople() {
 function openAddPeople() {
   if (!state.roster || state.busy || state.loading) return;
   state.addSearch = ''; state.addShowAll = false; $('add-search').value = ''; $('add-show-all').checked = false; $('add-message').textContent = ''; $('add-results').scrollTop = 0;
-  $('add-scope').textContent = `從「${state.meta.scopes.find(s => s.key === state.query.scope).label}${state.query.audience === 'children' ? ' · 兒童名單' : ''}」選人。這份自選名單只保存在這支手機。`;
+  const listLabel = state.query.audience === 'children' ? '兒童名單' : availableMeetings().find(m => m.key === state.query.meeting).label;
+  $('add-scope').textContent = `從「${state.meta.scopes.find(s => s.key === state.query.scope).label} · ${listLabel}」選人。這份自選名單只保存在這支手機。`;
   renderAddPeople(); $('add-dialog').showModal();
 }
 async function loadRoster({ preserve = false } = {}) {
@@ -162,7 +163,7 @@ async function loadRoster({ preserve = false } = {}) {
     if (seq !== state.seq) return;
     state.roster = roster; state.drafts = mergeDesired(roster, desired);
     try {
-      if (!selections.has(state.meta, query.scope, query.audience)) notice('正在帶入上週名單…');
+      if (!selections.has(state.meta, query.scope, query.audience, query.meeting)) notice('正在帶入上週名單…');
       const result = await selections.initialize({ meta: state.meta, query, roster,
         readRoster: source => api('/api/roster?' + new URLSearchParams(source)), isCurrent: () => seq === state.seq });
       if (seq !== state.seq || result.cancelled) return;
@@ -170,6 +171,7 @@ async function loadRoster({ preserve = false } = {}) {
       if (result.initialized) notice(result.saved
         ? result.selected.size ? '已帶入上週名單，並保存在這支手機。可按「編輯名單」調整；出席請依所選週次的實際情形點選。' : '上週這個聚會沒有可帶入的人名，請按「加入名單」選人。'
         : '已帶入上週名單供本次使用，但瀏覽器無法保存；關閉後可能需要重新加入。', !result.saved);
+      else if (result.persistenceFailed) notice('名單目前只能保留在本次使用；瀏覽器無法保存，關閉後可能需要重新加入。', true);
     } catch {
       if (seq !== state.seq) return;
       notice('已讀取目前名單，但暫時無法帶入上週人名。可按「加入名單」選人，或按「重新讀取」。', true, true);
@@ -186,7 +188,7 @@ async function changeScope(field, value) {
     state.query.meeting = state.meetingByAudience[value] ?? availableMeetings()[0].key;
     renderMeetingOptions();
   }
-  if (field === 'scope' || field === 'audience') loadSelection();
+  if (field === 'scope' || field === 'audience' || field === 'meeting') loadSelection();
   await loadRoster();
 }
 async function submit() {

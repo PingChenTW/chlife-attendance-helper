@@ -43,10 +43,10 @@
 | 後端預設入口與 API 別名 | `DEFAULT_GROUP`；[src/server.mjs](src/server.mjs) 的 `configuredRuntime` |
 | 原首頁、報表網址轉向與保留大組參數 | [public/group-context.js](public/group-context.js)；由 `app.js`、`reports.js` 啟動前呼叫 |
 | GitHub Pages 的預設大組 | [scripts/build.mjs](scripts/build.mjs) 的正式建置設定，目前為 `6` |
-| 手機自選名單與首次帶入 | [public/selection.js](public/selection.js) 的 `SelectionStore`，按手機／入口／小區／一般或兒童保存 ID；[public/app.js](public/app.js) 在取得目前名單後帶入上週人名 |
+| 手機自選名單與首次帶入 | [public/selection.js](public/selection.js) 的 `SelectionStore`，一般按手機／入口／小區／聚會保存 ID，兒童維持按小區另存；[public/app.js](public/app.js) 切換聚會時切換名單，首次讀該聚會上週出席 |
 | 原網站登入及點名介面 | [src/upstream.mjs](src/upstream.mjs) |
 | 正式週報的八大組與全召會彙總 | [src/church-reports.mjs](src/church-reports.mjs)、[src/reports.mjs](src/reports.mjs) |
-| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v15`；包含靜態說明頁，不快取 API、名單或帳密 |
+| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v16`；包含靜態說明頁，不快取 API、名單或帳密 |
 | 自動測試與 Pages 發布 | [.github/workflows/pages.yml](.github/workflows/pages.yml) |
 
 若日後更換預設大組，要同時調整 Render 的 `DEFAULT_GROUP` 與 `scripts/build.mjs` 的正式前端預設值；測試也要一併更新。不要只改首頁文字。
@@ -66,12 +66,13 @@
 
 ## 問題排查與回復
 
-- 首次帶入：`SelectionStore.initialize` 只在對應儲存鍵與本次工作階段均未初始化時執行。來源固定為伺服器 `meta.weeks[1]`、相同小區／聚會／一般或兒童，與目前名單取人員 ID 交集；只讀取出席以挑選人名，不修改原站出席。檢視上週時重用目前名單；其他情況額外一次名單 API。成功結果即使為空也保存，已有的空／非空／損壞紀錄均不自動覆蓋。失敗不標記初始化，允許重試。完成查詢後再檢查畫面是否已切換及是否已有名單，避免遲到的回應覆蓋選擇。無法保存時僅在本次工作階段保留並明確提醒，沒有新增雲端資料庫。
+- 舊共用名單升級：一般七項各自增加 `:meeting:聚會代碼` 儲存後綴。`SelectionStore.migrateMeetings` 先承接原有共用 ID，再一次複製到所有尚未有名單的一般聚會鍵；保留舊副本，不覆蓋已有目的鍵，空名單也保留。修改任何新名單都不回寫舊共用鍵，不影響另外六項。兒童沒有新增 meeting 後綴，維持原規則。
+- 首次帶入：`SelectionStore.initialize` 先承接舊資料，只在對應儲存鍵與當次工作階段均未初始化時執行。來源為 `meta.weeks[1]`、相同小區／聚會／一般或兒童，與目前名單取 ID 交集；只挑選人名，不修改原站出席。檢視上週重用目前名單，其他情況額外一次名單 API。成功空結果也保存，已有的空／非空／損壞紀錄均不覆蓋。失敗允許重試，遲到回應不能覆蓋選擇。無法保存時僅留當次工作階段並明確提醒，沒有新增雲端資料庫。
 - 自選名單像是消失：先確認是否從桌面網頁 App 改為 LINE／Safari／Chrome，這些環境可能不共用本機儲存空間。同一台手機不代表同一份名單；先回原先加入名單的環境、選相同小區及一般／兒童種類核對，不要先刪除捷徑、清除資料或重裝。現在同一瀏覽環境的原首頁與 `?group=6` 會共用六大組儲存鍵。`loadSelected` 只在六大組的新鍵不存在時承接舊首頁對應鍵，保留原副本；已有新鍵，即使名單為空也不覆蓋。此機制不做跨 App 同步。
 - 服務閒置或剛部署時可能需要啟動時間；先確認 Render 狀態，再重新讀取。不要因首次連線失敗就更換或公開帳密。
 - 「預設大組入口尚未設定」：確認 `DEFAULT_GROUP` 為字串 `6`，且 `links` 有 `group:"6"`，其 `source` 對應有效來源。設定錯誤應停止啟動，不能臨時改用舊帳號。
 - 「大組專屬入口尚未啟用」：核對 `GROUP_LINKS_JSON` 的 `links`，不要把錯誤入口轉到另一大組。
 - 報表頻率限制：依提示稍候；彙總快照最多共用約一分鐘，畫面會顯示資料時間。
-- 發現部署問題時先停用寫入再調查；回退版本必須支援 `DEFAULT_GROUP`，不能回退到仍要求舊帳密、卻已移除相關設定的版本。不要為回退重新填回已停用的舊帳密。
+- 發現部署問題時先停用寫入再調查；回退版本必須支援 `DEFAULT_GROUP`，不能回退到仍要求舊帳密、卻已移除相關設定的版本。不要為回退重新填回已停用的舊帳密。手機若回到舊共用版會讀舊副本，不能拿它覆寫新的 `:meeting:` 名單；保留所有 ID 鍵，不叫使用者清除資料。
 
 維護紀錄僅保存提交編號、測試結果、部署狀態與彙總筆數，不保存人名、帳密、名單簽章或登入憑證。
