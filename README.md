@@ -6,7 +6,7 @@
 
 **[手機使用說明（可貼到 LINE 分享）](https://pingchentw.github.io/chlife-attendance-helper/help.html)**：四步點名、名單編輯、兒童點名、報表與八個大組入口。點名及報表畫面上方的「說明」會保留原大組；說明頁可複製分享網址，不讀取姓名或出席資料，也不需要啟動後端。
 
-**[獨立手機使用統計](https://pingchentw.github.io/chlife-attendance-helper/usage.html)**：免登入查看各大組的點名頁開啟、名單查詢、點名送出與報表查詢。免費試用版從本次主機啟動後累計，重啟後歸零；不記姓名或個別出席。計數定義、API 與限制見 [使用統計維護說明](USAGE.md)。
+**[獨立手機使用統計](https://pingchentw.github.io/chlife-attendance-helper/usage.html)**：免登入查看各大組的點名頁開啟、名單查詢、點名送出與報表查詢。正式設定 Upstash 免費資料庫持續保存，已存入數字跨主機重啟保留，另顯示啟用至今累計；不記姓名或個別出席。無資料庫設定時才是重啟歸零試用。設定、計數及限制見 [使用統計維護說明](USAGE.md)。
 
 原網址與未指定大組的報表網址會自動進入[第六大組](https://pingchentw.github.io/chlife-attendance-helper/?group=6)。正式後端以 `DEFAULT_GROUP=6` 共用第六入口的服務、點名排程與報表，不另保存原首頁的舊帳號帳密。其餘 `?group=1` ～ `?group=8` 專屬連結照原指定的大組使用。
 

@@ -18,7 +18,7 @@
 | 手機網頁／PWA | [GitHub Pages](https://pingchentw.github.io/chlife-attendance-helper/)；原首頁自動進第六大組 |
 | 八個入口 | `/?group=1`～`/?group=8`；完整連結見 [維護手冊](MAINTENANCE.md#正式入口) |
 | 使用者說明 | [help.html](https://pingchentw.github.io/chlife-attendance-helper/help.html)，可分享到 LINE；可帶 `?group=6` 等參數，返回原大組 |
-| 獨立使用統計 | [usage.html](https://pingchentw.github.io/chlife-attendance-helper/usage.html)，公開操作次數、期間／入口篩選；使用者選定重啟歸零試用版，見 [USAGE.md](USAGE.md) |
+| 獨立使用統計 | [usage.html](https://pingchentw.github.io/chlife-attendance-helper/usage.html)，公開匿名次數、期間／入口與累計；使用者已改選 Upstash 免費持久模式，見 [USAGE.md](USAGE.md) |
 | 聚會報表 | [reports.html](https://pingchentw.github.io/chlife-attendance-helper/reports.html)，未帶大組時預設六大組 |
 | 後端 | [Render 服務](https://chlife-attendance-helper.onrender.com)，既有 Docker Free 單一服務；也提供同一套靜態手機介面 |
 | 部署控制台 | [Render Dashboard](https://dashboard.render.com/web/srv-dbgljttg1s2s73bngdjg)，服務 ID `srv-dbgljttg1s2s73bngdjg`，手動部署 |
@@ -56,15 +56,15 @@
 | 姓名與目前出席 | API 回應及畫面記憶體 | 不放進 localStorage 或 Service Worker 快取 |
 | 原站正式出席 | 原網站後端 | 送出後回讀確認，該站是正式資料來源 |
 | 彙總報表快照 | 後端每個來源共用的記憶體快取 | 約 60 秒、最多本週與上週；不是持久報表資料庫 |
-| 工具使用次數 | 後端 `UsageStatistics` 記憶體 | 台北日期／入口／固定聚會代碼的數值，最多三十日；重啟歸零，無歷史補登或姓名 |
+| 工具使用次數 | Upstash Redis 免費資料庫；機密在 Render | 台北日期／入口／固定聚會數值及累計不設應用層過期，已落庫跨重啟保存；無設定時才是三十日記憶體試用，無姓名或歷史補登 |
 | 基數 | Git 的 `baselines.csv` | 啟動時載入，更新後須部署後端 |
-| 離線介面 | Service Worker 公開檔案允許清單 | 目前快取版 `attendance-shell-v17`；不是離線點名佇列，不快取任何統計 API |
+| 離線介面 | Service Worker 公開檔案允許清單 | 目前快取版 `attendance-shell-v18`；不是離線點名佇列，不快取任何統計 API |
 
 ## 檔案與修改入口
 
 | 範圍 | 來源 | 主要責任 |
 | --- | --- | --- |
-| 獨立工具使用統計 | [src/usage.mjs](src/usage.mjs)、[public/usage-client.js](public/usage-client.js)、[usage.html](public/usage.html)、[usage.css](public/usage.css)、[usage.js](public/usage.js) | 記憶體彙總、頁面開啟回報、獨立手機頁；詳細接口與限制集中在 [USAGE.md](USAGE.md) |
+| 獨立工具使用統計 | [src/usage.mjs](src/usage.mjs)、[persistent-usage.mjs](src/persistent-usage.mjs)、[usage-store.mjs](src/usage-store.mjs)、[usage.html](public/usage.html)、[usage.js](public/usage.js) | 彙總、持久增量／去重、非阻塞重試、獨立手機頁；詳細接口與限制集中在 [USAGE.md](USAGE.md) |
 | 手機點名 | [public/index.html](public/index.html)、[app.js](public/app.js)、[styles.css](public/styles.css) | 範圍選擇、名單編輯、點選草稿、確認送出及回查訊息 |
 | 自選名單 | [public/selection.js](public/selection.js) | `selectionKey`、舊首頁承接、`SelectionStore` 首次帶入及保存 |
 | 畫面資料規則 | [public/model.js](public/model.js) | 小區篩選、修改差異、部分結果保留 |
@@ -173,7 +173,7 @@ CI 使用 [pages.yml](.github/workflows/pages.yml) 的 Linux 設定，會執行 
 | 大組或預設入口 | [group-links.test.mjs](test/group-links.test.mjs)、[http.test.mjs](test/http.test.mjs)；原首頁與六入口相容，其他入口不跨範圍 |
 | 基數或統計口徑 | [baselines.test.mjs](test/baselines.test.mjs)、[reports.test.mjs](test/reports.test.mjs)、[church-reports.test.mjs](test/church-reports.test.mjs) |
 | 週次／跨年 | [weeks.test.mjs](test/weeks.test.mjs)；台北週一換週與 ISO 年份 |
-| 使用統計 | [usage.test.mjs](test/usage.test.mjs)；台北跨日、期間／入口、批次去重、重啟、隱私白名單、配額分離、統計故障不影響點名；手機測試篩選、空白及錯誤提示 |
+| 使用統計 | [usage.test.mjs](test/usage.test.mjs)、[usage-persistence.test.mjs](test/usage-persistence.test.mjs)；台北跨日、還原、累計、增量、承接、去重、配額分離與故障不阻塞點名；手機測試保存狀態、篩選及錯誤 |
 | 使用說明或樣式 | 手機寬度 320／390 預覽、展開提示、八入口、原大組返回、複製／手動複製網址；不能等同實體裝置測試 |
 
 改功能後執行完整測試與建置；改介面加瀏覽器操作檢查。正式讀取結果不得另存人名 fixture。真實寫入驗證需本次任務明確指定姓名、週次、聚會及出席目標，否則只用假資料測送出。
@@ -198,12 +198,14 @@ Render 沒有依 GitHub push 自動部署。完整步驟見 [維護手冊](MAINT
 - 無法和原站其他使用者取得跨系統交易鎖；寫前核對與回讀能降低衝突，不能消除同時修改。
 - 進階總表（受浸、新人、青職等參考表欄位）仍只有 `report-profiles.json` 與 501 窗口；現有 8＋1 週報已上線，二者要分清楚。未來總帳號也要經來源與權限驗證，不任意疊加八帳號造成重複統計。
 - 沒有手機自選名單的雲端備份、跨瀏覽器同步或離線送出功能。
-- 使用統計是公開、程序記憶體的試用功能；重啟歸零，不能當永久歷史、獨立使用人數或防偽稽核。回報可能漏計或被人為呼叫；沒有為本功能新增追蹤使用者的識別碼或資料庫。
+- 使用統計為公開、匿名、Upstash 持久數值，已落庫跨重啟保留；不是獨立使用人數或防偽稽核。尚未落庫的佇列在程序突停時可能遺失；免費額度、長期閒置封存與資料庫故障仍有影響。沒有自動備份／付費升級，也沒有追蹤使用者識別碼。點名寫入排程及冪等結果仍是原有程序記憶體，不能因統計持久化就直接水平擴充點名服務。
 - 七項獨立名單屬手機儲存及畫面邏輯，原有名單／點名 API 契約沒有改變。回退到舊共用版可能只顯示保留的舊副本，不能據此覆寫新的 `:meeting:` 名單；排查或回退時保留兩套 ID 鍵。
 - 實體 iPhone／Android、實際 LINE 卡片預覽、尖峰併發仍待專項驗證；既有手機尺寸預覽與功能測試不代表這些已通過。
 - Actions 曾顯示部分第三方 action 的 Node runtime 棄用提示；更新 action 版本時另外驗證發布流程，不等同本專案 Node.js 24 執行需求有錯。
 
 ## 最近可供比對的驗證紀錄
+
+2026-11-02 持續統計更新：本機 80 項測試及正式前端建置通過。新增假 Redis transport 與假出席 HTTP 測試，涵蓋跨新程序、超過三十日累計、並行增量、已提交但回應遺失的重試、一次承接、不記人員資料及資料庫卡住時點名照常完成。正式部署與重啟前後數字需以此次實際發布紀錄核對，不把假 transport 測試當作雲端災難還原演練。
 
 2026-11-02 使用統計更新：本機 73 項測試及正式前端建置通過；假資料手機預覽驗證期間／入口篩選、每日與聚會明細、320／390 寬度、重啟歸零及錯誤可重試。開啟假資料點名與報表後，計數分別增加一次頁面開啟，未新增送出批次；查看統計不增加使用次數。正式上線的累計從新後端啟動後才開始，不回填這些測試數據。
 
