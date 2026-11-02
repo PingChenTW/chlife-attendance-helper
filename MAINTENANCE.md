@@ -1,5 +1,7 @@
 # 一起點名維護手冊
 
+新接手請先讀 [AI／工程師交接指南](HANDOFF.md)，AI 同時讀 [AGENTS.md](AGENTS.md)。本頁負責日常修改、部署與問題排查；架構、API、測試位置及已知限制集中在交接指南。給使用者的簡短教學仍是 [手機使用說明](https://pingchentw.github.io/chlife-attendance-helper/help.html)。
+
 ## 正式入口
 
 [原首頁](https://pingchentw.github.io/chlife-attendance-helper/) 自動進入第六大組。未帶 `group` 的 `reports.html` 也進入第六大組；帶有 `group` 的連結保留原指定大組，不會被六大組覆蓋。
@@ -56,7 +58,7 @@
 1. 修改對應程式或唯一基數表，使用 Node.js 24 以上執行 `npm test`。
 2. 以 `API_BASE_URL=https://chlife-attendance-helper.onrender.com` 執行 `npm run build`；未設定時產生假資料練習版，不會連正式服務。
 3. 推送 GitHub，等待 [Actions](https://github.com/PingChenTW/chlife-attendance-helper/actions) 的測試、建置與 Pages 發布成功。
-4. Render 為手動部署。在 [服務頁](https://dashboard.render.com/web/srv-dbgljttg1s2s73bngdjg) 選 **Manual Deploy → Deploy latest commit**；若這次需要修改環境變數，完成編輯後使用 **Save, rebuild, and deploy**。確認部署使用的 Git 提交與預期一致。
+4. 依 [變更與發布對照](HANDOFF.md#變更與發布對照) 決定是否需部署 Render。純根目錄 Markdown 文件不需重啟主機；後端或基數變更必須部署，手機介面則維持 Pages 與 Render 直連介面同步。在 [服務頁](https://dashboard.render.com/web/srv-dbgljttg1s2s73bngdjg) 選 **Manual Deploy → Deploy latest commit**；若需要修改環境變數，完成編輯後使用 **Save, rebuild, and deploy**。確認部署使用的 Git 提交與預期一致。
 5. 新部署顯示 Live 後，檢查原首頁會轉到 `?group=6`，報表預設第六大組，其餘七個專屬入口仍維持自己的大組。
 6. 讀取本週與上週名單及報表，確認其他大組的小區不能透過本入口點名。除非有明確指定可變更的真實紀錄，驗證只讀取資料；不要用隨機人名測試出席寫入。
 
