@@ -9,11 +9,13 @@ import { ChlifeAdapter } from './upstream.mjs';
 import { ReportService, configuredReportSources } from './reports.mjs';
 import { configuredGroups } from './group-links.mjs';
 import { groupManifest } from '../public/group-context.js';
+import { UsageStatistics } from './usage.mjs';
 
 const PUBLIC = path.resolve(fileURLToPath(new URL('../public/', import.meta.url)));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
-export function createApp({ service, reports = new ReportService(configuredReportSources(service.adapter)), groups = new Map(), defaultGroup = null, allowedOrigins = [], apiBase = '' }) {
+export function createApp({ service, reports = new ReportService(configuredReportSources(service.adapter)), groups = new Map(), defaultGroup = null, allowedOrigins = [], apiBase = '', usage = new UsageStatistics({ groups: [...groups.keys()], mode: service.adapter.mode }) }) {
   const limits = new Map();
+  const recordUsage = action => { try { action(); } catch { /* Usage failures cannot mask an attendance result. */ } };
   const connectOrigin = apiBase ? new URL(apiBase).origin : '';
   return http.createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -23,6 +25,7 @@ export function createApp({ service, reports = new ReportService(configuredRepor
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' ${connectOrigin}; base-uri 'self'; frame-ancestors 'none'; form-action 'none'`);
     const json = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
+    let usageGroup = defaultGroup, usageOperation = false, usageMeeting;
     try {
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname.startsWith('/api/')) {
@@ -32,16 +35,28 @@ export function createApp({ service, reports = new ReportService(configuredRepor
         ensure(!origin || sameOrigin || allowedOrigins.includes(origin), 403, 'ORIGIN_NOT_ALLOWED', '此網頁來源尚未開放連接。');
         if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
         if (req.method === 'OPTIONS') {
-          res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Attendance-Client', 'Access-Control-Max-Age': '600' }); res.end(); return;
+          res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Attendance-Client, X-Usage-Client', 'Access-Control-Max-Age': '600' }); res.end(); return;
         }
         const key = req.socket.remoteAddress;
         const now = Date.now();
         for (const [ip, entry] of limits) if (entry.reset < now) limits.delete(ip);
         ensure(limits.size < 10000 || limits.has(key), 429, 'BUSY', '目前使用人數較多，請稍後再試。');
         const counter = limits.get(key) ?? { read: 0, write: 0, reset: now + 60000 };
-        const kind = req.method === 'POST' ? 'write' : 'read';
-        counter[kind]++; limits.set(key, counter);
-        if (counter[kind] > (kind === 'write' ? 15 : 120)) { res.setHeader('Retry-After', String(Math.ceil((counter.reset - now) / 1000))); throw new AppError(429, 'RATE_LIMIT', '操作較頻繁，請稍後再試。'); }
+        const statistics = url.pathname.startsWith('/api/usage/');
+        const kind = statistics ? req.method === 'POST' ? 'usageEvent' : 'usageRead' : req.method === 'POST' ? 'write' : 'read';
+        counter[kind] = (counter[kind] ?? 0) + 1; limits.set(key, counter);
+        const quota = { write: 15, read: 120, usageEvent: 240, usageRead: 60 }[kind];
+        if (counter[kind] > quota) { res.setHeader('Retry-After', String(Math.ceil((counter.reset - now) / 1000))); throw new AppError(429, 'RATE_LIMIT', '操作較頻繁，請稍後再試。'); }
+        if (url.pathname === '/api/usage/summary' && req.method === 'GET') {
+          json(200, usage.summary({ period: url.searchParams.get('period') ?? '7d', group: url.searchParams.get('group') ?? 'all' })); return;
+        }
+        if (url.pathname === '/api/usage/events' && req.method === 'POST') {
+          ensure(req.headers['content-type']?.split(';')[0].trim() === 'application/json' && req.headers['x-usage-client'] === '1', 415, 'JSON_REQUIRED', '使用統計事件格式不正確。');
+          const chunks = []; let size = 0;
+          for await (const chunk of req) { size += chunk.length; ensure(size <= 512, 413, 'TOO_LARGE', '使用統計事件過大。'); chunks.push(chunk); }
+          let event; try { event = JSON.parse(Buffer.concat(chunks).toString()); } catch { throw new AppError(400, 'BAD_JSON', '使用統計事件格式不正確。'); }
+          usage.recordView(event); json(202, { recorded: true }); return;
+        }
         let apiPath=url.pathname,activeService=service,activeReports=reports;
         if(apiPath.startsWith('/api/groups/')) {
           const match=apiPath.match(/^\/api\/groups\/([1-8])\/(.+)$/);
@@ -49,24 +64,32 @@ export function createApp({ service, reports = new ReportService(configuredRepor
           const entry=groups.get(match[1]);
           ensure(entry,503,'GROUP_NOT_CONFIGURED','這個大組專屬入口尚未啟用，請聯絡管理者。');
           activeService=entry.service;activeReports=entry.reports;apiPath='/api/'+match[2];
+          usageGroup=match[1];
         }
         if (apiPath === '/api/meta' && req.method === 'GET') { json(200, await activeService.metadata()); return; }
         if (apiPath === '/api/reports/meta' && req.method === 'GET') { json(200,activeReports.metadata()); return; }
         if (apiPath === '/api/reports/summary' && req.method === 'GET') { json(200,await activeReports.summary({week:url.searchParams.get('week')}));return; }
         if (apiPath === '/api/reports/weekly' && req.method === 'GET') {
-          json(200,await activeReports.weekly({ week:url.searchParams.get('week'),source:url.searchParams.get('source') ?? 'primary',group:url.searchParams.get('group') })); return;
+          usageOperation=true;
+          const result=await activeReports.weekly({ week:url.searchParams.get('week'),source:url.searchParams.get('source') ?? 'primary',group:url.searchParams.get('group') });
+          recordUsage(()=>usage.recordOperation(usageGroup,'reportReads')); json(200,result); return;
         }
         if (apiPath === '/api/roster' && req.method === 'GET') {
-          json(200, await activeService.roster({ week: url.searchParams.get('week'), scope: url.searchParams.get('scope'), meeting: url.searchParams.get('meeting'), audience: url.searchParams.get('audience') ?? 'all' })); return;
+          usageOperation=true;usageMeeting=url.searchParams.get('meeting');
+          const result=await activeService.roster({ week: url.searchParams.get('week'), scope: url.searchParams.get('scope'), meeting: usageMeeting, audience: url.searchParams.get('audience') ?? 'all' });
+          recordUsage(()=>usage.recordOperation(usageGroup,'rosterReads',usageMeeting)); json(200,result); return;
         }
         if (apiPath === '/api/attendance' && req.method === 'POST') {
+          usageOperation=true;
           ensure(req.headers['content-type']?.split(';')[0].trim() === 'application/json' && req.headers['x-attendance-client'] === '1', 415, 'JSON_REQUIRED', '請使用點名工具送出資料。');
           const chunks = []; let size = 0;
           for await (const chunk of req) { size += chunk.length; ensure(size <= 262144, 413, 'TOO_LARGE', '送出的資料過多，請分批處理。'); chunks.push(chunk); }
           let input;
           try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new AppError(400, 'BAD_JSON', '送出資料格式錯誤。'); }
           ensure(input && typeof input === 'object' && !Array.isArray(input), 400, 'BAD_JSON', '送出資料格式錯誤。');
-          json(200, await activeService.submit(input)); return;
+          usageMeeting=input.meeting;
+          const result=await activeService.submit(input);
+          recordUsage(()=>usage.recordSubmission(usageGroup,input.requestId,result,usageMeeting)); json(200,result); return;
         }
         throw new AppError(404, 'NOT_FOUND', '找不到此功能。');
       }
@@ -82,6 +105,7 @@ export function createApp({ service, reports = new ReportService(configuredRepor
       else { try { content = await readFile(target); } catch { throw new AppError(404, 'NOT_FOUND', '找不到此頁面。'); } }
       res.writeHead(200, { 'Content-Type': types[path.extname(target)] }); res.end(req.method === 'HEAD' ? undefined : content);
     } catch (error) {
+      if(usageOperation)recordUsage(()=>usage.recordFailure(usageGroup,usageMeeting));
       if (!res.headersSent) json(error instanceof AppError ? error.status : 500, { error: { code: error instanceof AppError ? error.code : 'INTERNAL_ERROR', message: error instanceof AppError ? error.message : '暫時無法完成操作，請稍後再試。' } });
       else res.end();
     }

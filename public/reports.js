@@ -6,6 +6,11 @@ const linkGroup=parseGroupContext(window.location.search);applyGroupContext(link
 const $ = id=>document.getElementById(id);
 const base = String(window.ATTENDANCE_CONFIG?.apiBase ?? '').replace(/\/$/,'');
 const practice = window.ATTENDANCE_CONFIG?.practice ? createPracticeApi() : null;
+let usageReporter;
+function reportUsage(page, group) {
+  usageReporter ??= import('./usage-client.js').then(module => module.createUsageReporter({ apiBase: base, enabled: !practice })).catch(() => null);
+  void usageReporter.then(report => report?.(page, group)).catch(() => {});
+}
 const state = { meta:null,week:null,source:'primary',group:'',report:null,busy:false,seq:0 };
 async function api(path) {
   const requestPath=groupApiPath(path,linkGroup);
@@ -35,6 +40,7 @@ function metrics() {
   }));
 }
 function render(report) {
+  if(report.mode==='live')void reportUsage('reports',linkGroup.id);
   state.report=report;state.group=report.group.key;
   $('report-church').textContent=report.church;
   $('report-demo').hidden=report.mode!=='demo';
