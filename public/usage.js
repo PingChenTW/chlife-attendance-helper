@@ -22,6 +22,13 @@ function render(data) {
   const options = [{ key: 'all', label: '全部大組' }, ...data.groups];
   $('usage-group').replaceChildren(...options.map(group => { const option = text('option', group.label); option.value = group.key; return option; }));
   $('usage-group').value = state.group;
+  const durable = data.storage === 'redis';
+  $('usage-storage').textContent = durable ? '持續保存：已存入的統計在主機重啟、更新後仍會保留。' : '記憶體試用版：只累計本次主機啟動後的資料，主機重啟後歸零。';
+  $('usage-retention').textContent = durable ? '每日彙總持續保存；上方顯示所選期間，下方累計自統計啟用起計算。' : '最多保留本次啟動期間的近三十日彙總。';
+  $('usage-lifetime').hidden = !durable;
+  if (durable) $('usage-lifetime').textContent = `啟用至今累計（${options.find(group => group.key === state.group)?.label ?? '全部大組'}）\n點名頁 ${number(data.lifetimeTotals?.attendanceViews)} 次 · 名單查詢 ${number(data.lifetimeTotals?.rosterReads)} 次\n點名送出 ${number(data.lifetimeTotals?.submissions)} 批 · 報表查詢 ${number(data.lifetimeTotals?.reportReads)} 次`;
+  $('usage-sync').hidden = !durable || data.persistence?.state === 'saved';
+  if (!$('usage-sync').hidden) $('usage-sync').textContent = `有 ${number(data.persistence?.pendingEvents)} 筆操作待同步，以上先顯示已保存的數字。${data.persistence?.droppedEvents ? `本次主機有 ${number(data.persistence.droppedEvents)} 筆未能收錄。` : ''}點名仍可使用；尚未同步前主機若突然停止，部分次數可能漏計。`;
   $('usage-demo').hidden = data.mode !== 'demo';
   $('usage-range').textContent = `${options.find(group => group.key === state.group)?.label ?? '全部大組'} · ${data.range.from}～${data.range.to}`;
   $('usage-cards').replaceChildren(...[
@@ -42,7 +49,7 @@ function render(data) {
   }));
   rows('usage-groups', data.byGroup, ['attendanceViews','submissions','reportReads']);
   rows('usage-meetings', data.byMeeting, ['rosterReads','submissions']);
-  $('usage-started').textContent = `本次統計啟動：${time(data.startedAt)}`;
+  $('usage-started').textContent = `${durable ? '統計起始' : '本次統計啟動'}：${time(data.startedAt)}`;
   $('usage-updated').textContent = `更新時間：${time(data.generatedAt)}\n最後操作：${time(data.lastActivity)}`;
   $('usage-content').hidden = false;
 }
