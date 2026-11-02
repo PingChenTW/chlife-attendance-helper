@@ -6,6 +6,8 @@
 
 **[手機使用說明（可貼到 LINE 分享）](https://pingchentw.github.io/chlife-attendance-helper/help.html)**：四步點名、名單編輯、兒童點名、報表與八個大組入口。點名及報表畫面上方的「說明」會保留原大組；說明頁可複製分享網址，不讀取姓名或出席資料，也不需要啟動後端。
 
+**[獨立手機使用統計](https://pingchentw.github.io/chlife-attendance-helper/usage.html)**：免登入查看各大組的點名頁開啟、名單查詢、點名送出與報表查詢。免費試用版從本次主機啟動後累計，重啟後歸零；不記姓名或個別出席。計數定義、API 與限制見 [使用統計維護說明](USAGE.md)。
+
 原網址與未指定大組的報表網址會自動進入[第六大組](https://pingchentw.github.io/chlife-attendance-helper/?group=6)。正式後端以 `DEFAULT_GROUP=6` 共用第六入口的服務、點名排程與報表，不另保存原首頁的舊帳號帳密。其餘 `?group=1` ～ `?group=8` 專屬連結照原指定的大組使用。
 
 **工程師／AI 接手：[交接指南](HANDOFF.md) → [維護手冊](MAINTENANCE.md) · [AI 專案指引](AGENTS.md)**

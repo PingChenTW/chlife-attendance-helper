@@ -19,6 +19,8 @@
 
 每個入口只點名本大組。報表經原站權限確認後提供八大組＋全召會，預設自己的大組。免登入入口可由知道網址的人使用；網址分流不是身分驗證。
 
+[獨立手機使用統計](https://pingchentw.github.io/chlife-attendance-helper/usage.html) 也可由知道網址的人查看，只提供操作次數。這是使用者選定的免費試用版，自本次主機啟動後累計、重啟歸零；細節與 API 見 [USAGE.md](USAGE.md)。
+
 ## 帳密與預設入口
 
 帳密只存於 [Render 環境設定](https://dashboard.render.com/web/srv-dbgljttg1s2s73bngdjg/env) 的 `GROUP_LINKS_JSON`。禁止把實際帳號、密碼、裝置識別碼或登入憑證放進 Git、GitHub Pages、截圖或維護紀錄。
@@ -37,6 +39,7 @@
 
 | 要修改的內容 | 檔案／設定 |
 | --- | --- |
+| 使用統計 | [src/usage.mjs](src/usage.mjs)、[public/usage-client.js](public/usage-client.js)、[public/usage.html](public/usage.html)、[usage.css](public/usage.css)、[usage.js](public/usage.js)；路由在 server.mjs，完整計數口徑見 [USAGE.md](USAGE.md) |
 | 可分享的手機使用說明 | [public/help.html](public/help.html)、[public/help.css](public/help.css)、[public/help.js](public/help.js)；公開網址 `/help.html`，可選帶 `?group=1` ～ `8` 保留大組，沒有名單 API 呼叫 |
 | 所有年度、大組、小區基數 | 唯一資料表 [baselines.csv](baselines.csv) |
 | 群組帳號、點名權限與來源分流 | Render 的 `GROUP_LINKS_JSON`；程式 [src/group-links.mjs](src/group-links.mjs) |
@@ -46,7 +49,7 @@
 | 手機自選名單與首次帶入 | [public/selection.js](public/selection.js) 的 `SelectionStore`，一般按手機／入口／小區／聚會保存 ID，兒童維持按小區另存；[public/app.js](public/app.js) 切換聚會時切換名單，首次讀該聚會上週出席 |
 | 原網站登入及點名介面 | [src/upstream.mjs](src/upstream.mjs) |
 | 正式週報的八大組與全召會彙總 | [src/church-reports.mjs](src/church-reports.mjs)、[src/reports.mjs](src/reports.mjs) |
-| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v16`；包含靜態說明頁，不快取 API、名單或帳密 |
+| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v17`；包含靜態說明及統計介面，不快取 API、名單或帳密 |
 | 自動測試與 Pages 發布 | [.github/workflows/pages.yml](.github/workflows/pages.yml) |
 
 若日後更換預設大組，要同時調整 Render 的 `DEFAULT_GROUP` 與 `scripts/build.mjs` 的正式前端預設值；測試也要一併更新。不要只改首頁文字。
@@ -66,6 +69,7 @@
 
 ## 問題排查與回復
 
+- 使用統計歸零：先看統計啟動時間，重啟或重新部署後歸零是本試用版既定行為，不代表點名或手機自選名單被清除。統計頁不計入使用次數，也沒有自動輪詢。若統計讀取失敗仍可使用點名；若 API 找不到，核對 Render 已部署新模組，勿只更新 Pages。
 - 舊共用名單升級：一般七項各自增加 `:meeting:聚會代碼` 儲存後綴。`SelectionStore.migrateMeetings` 先承接原有共用 ID，再一次複製到所有尚未有名單的一般聚會鍵；保留舊副本，不覆蓋已有目的鍵，空名單也保留。修改任何新名單都不回寫舊共用鍵，不影響另外六項。兒童沒有新增 meeting 後綴，維持原規則。
 - 首次帶入：`SelectionStore.initialize` 先承接舊資料，只在對應儲存鍵與當次工作階段均未初始化時執行。來源為 `meta.weeks[1]`、相同小區／聚會／一般或兒童，與目前名單取 ID 交集；只挑選人名，不修改原站出席。檢視上週重用目前名單，其他情況額外一次名單 API。成功空結果也保存，已有的空／非空／損壞紀錄均不覆蓋。失敗允許重試，遲到回應不能覆蓋選擇。無法保存時僅留當次工作階段並明確提醒，沒有新增雲端資料庫。
 - 自選名單像是消失：先確認是否從桌面網頁 App 改為 LINE／Safari／Chrome，這些環境可能不共用本機儲存空間。同一台手機不代表同一份名單；先回原先加入名單的環境、選相同小區及一般／兒童種類核對，不要先刪除捷徑、清除資料或重裝。現在同一瀏覽環境的原首頁與 `?group=6` 會共用六大組儲存鍵。`loadSelected` 只在六大組的新鍵不存在時承接舊首頁對應鍵，保留原副本；已有新鍵，即使名單為空也不覆蓋。此機制不做跨 App 同步。
