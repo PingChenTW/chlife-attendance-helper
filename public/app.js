@@ -10,6 +10,11 @@ const $ = id => document.getElementById(id);
 const state = { meta: null, query: null, roster: null, drafts: new Map(), selected: new Set(), busy: false, loading: false, seq: 0, addSearch: '', addShowAll: false, lastSaved: false, meetingByAudience: {} };
 const base = String(window.ATTENDANCE_CONFIG?.apiBase ?? '').replace(/\/$/, '');
 const practice = window.ATTENDANCE_CONFIG?.practice ? createPracticeApi() : null;
+let usageReporter;
+function reportUsage(page, group) {
+  usageReporter ??= import('./usage-client.js').then(module => module.createUsageReporter({ apiBase: base, enabled: !practice })).catch(() => null);
+  void usageReporter.then(report => report?.(page, group)).catch(() => {});
+}
 function notice(message, error = false, retry = false) {
   const node = $('notice'); node.replaceChildren(); node.hidden = !message; node.className = error ? 'notice error' : 'notice';
   if (!message) return;
@@ -226,6 +231,7 @@ async function start() {
     const meta = await api('/api/meta');
     meta.scopes = districtScopes(meta.scopes);
     if (!meta.scopes?.length || !meta.meetings?.length || !meta.weeks?.length) throw new Error('尚未取得可用的小區與聚會，請稍後再試。');
+    if(meta.mode==='live')void reportUsage('attendance',linkGroup.id);
     state.meta = meta; state.query = { week: meta.weeks[0].key, scope: meta.scopes[0].key, meeting: meta.meetings[0].key, audience: 'all' };
     loadSelection();
     $('group-label').textContent = meta.group;
