@@ -64,7 +64,7 @@ export class ChlifeAdapter {
     ensure(Array.isArray(tree) && Array.isArray(meetings), 502, 'UPSTREAM_SCHEMA', '原網站資料格式已變更，請聯絡管理者。');
     const scopes = selectScopes(tree, auth.user);
     const groups = [...new Set(scopes.map(s => s.path.split(' / ')[0]))];
-    const value = { church: tree.find(t => Number(t.id) === this.churchId)?.name ?? '召會生活', group: groups.join('、'), scopes, meetings: selectMeetings(meetings), childMeetings: selectChildMeetings(meetings) };
+    const value = { church: tree.find(t => Number(t.id) === this.churchId)?.name ?? '召會生活', group: groups.join('、'), scopes, meetings: selectMeetings(meetings), childMeetings: selectChildMeetings(meetings), reportMeetings: meetings.map(({id,name})=>({id:Number(id),name:String(name)})) };
     if (this.metaCache.size >= 2) this.metaCache.delete(this.metaCache.keys().next().value);
     this.metaCache.set(week.key, { value, expires: Date.now() + 30000 });
     return value;

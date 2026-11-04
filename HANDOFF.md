@@ -1,6 +1,6 @@
 # AI／工程師交接指南
 
-最後核對：2026-11-02。這是維護入口；程式與即時部署狀態是最終依據。日後修改功能、設定或部署時，請同步更新相關段落。
+最後核對：2026-11-04。這是維護入口；程式與即時部署狀態是最終依據。日後修改功能、設定或部署時，請同步更新相關段落。
 
 ## 接手先做這幾件事
 
@@ -58,7 +58,7 @@
 | 彙總報表快照 | 後端每個來源共用的記憶體快取 | 約 60 秒、最多本週與上週；不是持久報表資料庫 |
 | 工具使用次數 | Upstash Redis 免費資料庫；機密在 Render | 台北日期／入口／固定聚會數值及累計不設應用層過期，已落庫跨重啟保存；無設定時才是三十日記憶體試用，無姓名或歷史補登 |
 | 基數 | Git 的 `baselines.csv` | 啟動時載入，更新後須部署後端 |
-| 離線介面 | Service Worker 公開檔案允許清單 | 目前快取版 `attendance-shell-v18`；不是離線點名佇列，不快取任何統計 API |
+| 離線介面 | Service Worker 公開檔案允許清單 | 本次介面快取版 `attendance-shell-v19`；不是離線點名佇列，不快取任何統計 API |
 
 ## 檔案與修改入口
 
@@ -79,7 +79,8 @@
 | 原站轉接 | [src/upstream.mjs](src/upstream.mjs) | `ChlifeAdapter`、登入更新、取名單、寫入、原站錯誤轉換 |
 | 範圍與聚會 | [src/scopes.mjs](src/scopes.mjs)、[weeks.mjs](src/weeks.mjs) | 原站權限、聚會精確名稱、台北時區與 ISO 週 |
 | 正式報表 | [src/church-reports.mjs](src/church-reports.mjs)、[reports.mjs](src/reports.mjs) | 正式週報口徑、8＋1、同來源快照、彙總與 CSV |
-| 基數與進階窗口 | [src/baselines.mjs](src/baselines.mjs)、[report-profiles.json](src/report-profiles.json) | 唯一 CSV 驗證、進階總表欄位預留 |
+| 全召會完整總表 | [src/church-summary.mjs](src/church-summary.mjs)、[REPORTS.md](REPORTS.md) | 圖片完整欄位、兒童主日分齡、上週比較、同一正式來源的角色彙總 |
+| 基數與報表設定 | [src/baselines.mjs](src/baselines.mjs)、[report-profiles.json](src/report-profiles.json) | 唯一 CSV 驗證、完整總表是否由來源支援 |
 | 建置與發布 | [scripts/build.mjs](scripts/build.mjs)、[pages.yml](.github/workflows/pages.yml) | 產生 `dist/` 與非機密 `config.js`，Actions 發布 Pages |
 
 ## 必須維持的業務規則
@@ -122,9 +123,9 @@
 | `GET /meta` | `weeks`、授權 `scopes`、一般／兒童聚會、`siteKey`、`writesEnabled`；不要用寫死的週與小區代碼 |
 | `GET /roster?week=...&scope=...&meeting=...&audience=all` | 回傳所選範圍的 `members`、`snapshot`；兒童用 `audience=children` |
 | `POST /attendance` | JSON：`week,scope,meeting,audience,snapshot,requestId,changes`；`changes` 每筆為 `memberId,attended`。需 `Content-Type: application/json` 及 `X-Attendance-Client: 1` |
-| `GET /reports/meta` | 可選的來源、大組、週次及預留報表是否就緒 |
+| `GET /reports/meta` | 可選的來源、大組、週次及完整報表是否由來源支援；實際權限仍須驗證 |
 | `GET /reports/weekly?week=...&group=...` | 現有 8＋1 週報；`group` 應取自 report meta，不把入口號碼當原站 node key |
-| `GET /reports/summary?week=...` | 進階總表預留，目前 HTTP 501 `SUMMARY_NOT_READY`；現有 8＋1 週報不受影響 |
+| `GET /reports/summary?week=...&source=primary` | 全召會完整總表，含兒童主日學齡前／小學／合計、前一週小計；不支援來源才為 501，詳見 REPORTS.md |
 
 上述路徑都要接在大組 API 前綴後，例如 `/api/groups/6/meta`。完整錯誤格式為 `{error:{code,message}}`。`SNAPSHOT_EXPIRED` 要重讀；`ROSTER_CHANGED` 核對人員／權限；`GROUP_NOT_CONFIGURED`／`DEFAULT_GROUP` 查機密設定；`AUTH_ACTION_REQUIRED` 由帳號管理者回原站處理，不繞過驗證或改密碼。
 
@@ -171,7 +172,7 @@ CI 使用 [pages.yml](.github/workflows/pages.yml) 的 Linux 設定，會執行 
 | 原站登入、欄位或權限 | [upstream.test.mjs](test/upstream.test.mjs)、[scopes.test.mjs](test/scopes.test.mjs)；正式驗證先只讀取，不列印個資 |
 | 送出、逾時、部分成功 | [service.test.mjs](test/service.test.mjs)、[model.test.mjs](test/model.test.mjs)；用假的 timeout／readback 測試 |
 | 大組或預設入口 | [group-links.test.mjs](test/group-links.test.mjs)、[http.test.mjs](test/http.test.mjs)；原首頁與六入口相容，其他入口不跨範圍 |
-| 基數或統計口徑 | [baselines.test.mjs](test/baselines.test.mjs)、[reports.test.mjs](test/reports.test.mjs)、[church-reports.test.mjs](test/church-reports.test.mjs) |
+| 基數或統計口徑 | [baselines.test.mjs](test/baselines.test.mjs)、[reports.test.mjs](test/reports.test.mjs)、[church-reports.test.mjs](test/church-reports.test.mjs)、[church-summary.test.mjs](test/church-summary.test.mjs) |
 | 週次／跨年 | [weeks.test.mjs](test/weeks.test.mjs)；台北週一換週與 ISO 年份 |
 | 使用統計 | [usage.test.mjs](test/usage.test.mjs)、[usage-persistence.test.mjs](test/usage-persistence.test.mjs)；台北跨日、還原、累計、增量、承接、去重、配額分離與故障不阻塞點名；手機測試保存狀態、篩選及錯誤 |
 | 使用說明或樣式 | 手機寬度 320／390 預覽、展開提示、八入口、原大組返回、複製／手動複製網址；不能等同實體裝置測試 |
@@ -196,7 +197,7 @@ Render 沒有依 GitHub push 自動部署。完整步驟見 [維護手冊](MAINT
 - 同入口寫入排隊，報表快取按來源共用，尚未做正式壓力測試。先前討論的使用人數是估算，不能當成容量保證。
 - 只有單一程序的佇列、冪等記錄與登入快取；重啟會遺失。新增多實例前須設計共用佇列／冪等與部署中的請求處理，不能直接水平擴充。
 - 無法和原站其他使用者取得跨系統交易鎖；寫前核對與回讀能降低衝突，不能消除同時修改。
-- 進階總表（受浸、新人、青職等參考表欄位）仍只有 `report-profiles.json` 與 501 窗口；現有 8＋1 週報已上線，二者要分清楚。未來總帳號也要經來源與權限驗證，不任意疊加八帳號造成重複統計。
+- 全召會完整總表以單一已驗證來源的正式週報 `group_by_role=1` 取得全組及角色數值，不拼接八帳號。兒童主日分齡包含普通主日中已受浸兒童及拆分的兒童福朋，不能只取「童」。一般小區表仍使用原契約；來源不完整時拒絕產生全召會成功回應。原站自製 weekly-grid 的權限與 schema 不同，不拿它代替正式週報。詳見 REPORTS.md。
 - 沒有手機自選名單的雲端備份、跨瀏覽器同步或離線送出功能。
 - 使用統計為公開、匿名、Upstash 持久數值，已落庫跨重啟保留；不是獨立使用人數或防偽稽核。尚未落庫的佇列在程序突停時可能遺失；免費額度、長期閒置封存與資料庫故障仍有影響。沒有自動備份／付費升級，也沒有追蹤使用者識別碼。點名寫入排程及冪等結果仍是原有程序記憶體，不能因統計持久化就直接水平擴充點名服務。
 - 七項獨立名單屬手機儲存及畫面邏輯，原有名單／點名 API 契約沒有改變。回退到舊共用版可能只顯示保留的舊副本，不能據此覆寫新的 `:meeting:` 名單；排查或回退時保留兩套 ID 鍵。
@@ -204,6 +205,8 @@ Render 沒有依 GitHub push 自動部署。完整步驟見 [維護手冊](MAINT
 - Actions 曾顯示部分第三方 action 的 Node runtime 棄用提示；更新 action 版本時另外驗證發布流程，不等同本專案 Node.js 24 執行需求有錯。
 
 ## 最近可供比對的驗證紀錄
+
+2026-11-04 完整總表更新：本機 87 項測試及正式前端建置通過；唯讀原站驗證本週／上週皆可取得八大組與年度基數合計，兒童分齡各列及總計一致。假資料手機 320／390 寬無頁面橫向溢出，25 張指標卡、兩層表頭、8 組、小計／比較兩列、切換大組卡片及瀏覽器 CSV 實際下載均已檢查；正式發布核對另記於下，不把開發版當成正式服務已更新。沒有修改真實出席。
 
 2026-11-02 持續統計更新：本機 80 項測試及正式前端建置通過。新增假 Redis transport 與假出席 HTTP 測試，涵蓋跨新程序、超過三十日累計、並行增量、已提交但回應遺失的重試、一次承接、不記人員資料及資料庫卡住時點名照常完成。正式部署與重啟前後數字需以此次實際發布紀錄核對，不把假 transport 測試當作雲端災難還原演練。
 

@@ -3,6 +3,7 @@ import { weekOptions, requireWeek } from './weeks.mjs';
 import { ChlifeAdapter } from './upstream.mjs';
 import {BASELINES} from './baselines.mjs';
 import profiles from './report-profiles.json' with { type: 'json' };
+import { SUMMARY_FIELDS } from './church-summary.mjs';
 
 const FIELDS = ['sunday', 'gospel', 'home-in', 'home-out', 'reading', 'group', 'children-sunday', 'children-group'];
 const count = value => Number.isSafeInteger(value) && value >= 0;
@@ -28,10 +29,32 @@ export function configuredReportSources(primary, json) {
 }
 export class ReportService {
   constructor(sources, { now = () => new Date(), baselines = BASELINES } = {}) { this.sources = sources; this.now = now; this.baselines = baselines; }
-  metadata() { return { weeks: weekOptions(this.now()), sources: this.sources.map(({key,label}) => ({key,label})), reportTypes:Object.entries(profiles).map(([key,{label,ready}])=>({key,label,ready})) }; }
+  metadata() { return { weeks: weekOptions(this.now()), sources: this.sources.map(({key,label}) => ({key,label})), reportTypes:Object.entries(profiles).map(([key,{label,ready}])=>({key,label,ready:key==='all-groups'?this.sources.some(source=>typeof source.adapter.churchSummary==='function'):ready})) }; }
   async summary(query) {
-    requireWeek(query.week,this.now());
-    throw new AppError(501,'SUMMARY_NOT_READY','各大組總表已預留介面，待設定總帳號及確認欄位口徑後啟用。');
+    const week=requireWeek(query.week,this.now()), previousWeek=weekOptions(new Date(week.start+'T04:00:00Z'))[1];
+    const source=this.sources.find(item=>item.key===(query.source??'primary'));
+    ensure(source,403,'REPORT_SOURCE','無法使用這個資料來源，請重新選擇。');
+    ensure(typeof source.adapter.churchSummary==='function',501,'SUMMARY_NOT_READY','這個來源尚未開放全召會完整總表。');
+    const meta=await source.adapter.metadata(week);
+    ensure(meta.supportsChurchReport,403,'REPORT_SCOPE','這個帳號沒有可確認的全召會報表權限。');
+    const current=await source.adapter.churchSummary(week,meta);
+    const previousMeta=await source.adapter.metadata(previousWeek);
+    ensure(previousMeta.supportsChurchReport,403,'REPORT_SCOPE','這個帳號沒有可確認的比較週報表權限。');
+    const previous=await source.adapter.churchSummary(previousWeek,previousMeta);
+    const pack=(raw,period,periodMeta)=>{
+      ensure(Array.isArray(raw.rows)&&raw.rows.length&&raw.totals&&[...raw.rows,raw.totals].every(row=>SUMMARY_FIELDS.every(key=>row[key]===null||count(row[key]))),502,'SUMMARY_SCHEMA','原網站總表資料不完整。');
+      const baselines=this.baselines[period.year]?.[source.adapter.churchId]?.[2]??{};
+      const calculate=row=>({...calculated(row),careerRatio:ratio(row.careerSunday,row.baseline),careerHomeRatio:ratio(row.careerHome,row.baseline)});
+      const rows=raw.rows.map(row=>calculate({...row,baseline:count(baselines[row.scope.split(':')[1]])?baselines[row.scope.split(':')[1]]:null}));
+      const totals=calculate({...raw.totals,label:'小計',baseline:sum(periodMeta.reportGroups.map(group=>baselines[group.id]))});
+      return {rows,totals};
+    };
+    const packed=pack(current,week,meta), comparison=pack(previous,previousWeek,previousMeta);
+    return {profile:'all-groups',week,previousWeek,source:{key:source.key,label:source.label},church:meta.church,group:{key:'church',label:'全召會'},
+      groups:[...meta.reportGroups.map(({key,label})=>({key,label})),{key:'church',label:'全召會'}],mode:source.adapter.mode,...packed,
+      previousTotals:{...comparison.totals,label:'上週',baselineYear:previousWeek.year},rowLevel:2,baselineKind:'groups',baselineYear:week.year,
+      loadedAt:current.loadedAt,comparisonLoadedAt:previous.loadedAt,cacheSeconds:current.cacheSeconds,inProgress:week.key===weekOptions(this.now())[0].key,
+      baptismEstimated:current.baptismEstimated};
   }
   async weekly(query) {
     const week = requireWeek(query.week,this.now());

@@ -22,7 +22,7 @@
 | `attendanceViews` | 點名頁成功取得初始化資料後，前端最佳努力回報一次；同一頁生命週期不重複回報，重新開啟可再計 |
 | `reportViews` | 報表頁第一次成功顯示正式週報後回報；後續在同一頁換週或換範圍不另計開啟 |
 | `rosterReads` | 後端成功提供一次名單 HTTP 查詢；含切換、重讀與首次帶入，內部寫前核對及回查不另計 |
-| `reportReads` | 後端成功處理一次週報 HTTP 查詢，含快照回傳；不是直接打原站的請求數 |
+| `reportReads` | 後端成功處理一次週報或全召會完整總表 HTTP 查詢，含快照回傳；不是直接打原站的請求數，內部比較週不另計 |
 | `submissions` | 有效點名請求完成處理後的批次數；含已確認、部分成功及尚未確認，同入口同 requestId 在短期內只計一次 |
 | `confirmedBatches` | 本批全部目標經回查已確認 |
 | `unconfirmedBatches` | 本批結果為 partial／unconfirmed，仍有需要核對的目標 |
@@ -56,7 +56,7 @@ API 查詢也可能來自維護檢查，不限手機瀏覽器。查看統計頁�
 
 ## 發布、驗證與排查
 
-1. `npm test` 與正式 `API_BASE_URL` 建置；UI 改動更新 Service Worker，本版為 `attendance-shell-v18`。統計 API 永不進入離線允許清單。
+1. `npm test` 與正式 `API_BASE_URL` 建置；UI 改動更新 Service Worker，本版為 `attendance-shell-v19`。統計 API 永不進入離線允許清單。
 2. 前後端都需發布；GitHub 更新不會自動部署 Render。持久模式需要下面兩個機密設定，從 Upstash 資料庫的 REST 區取得，不可用唯讀 token。
 3. 驗證 API `storage:"redis"`、起始時間、累計與保存狀態；重啟前後比較同期間／同入口，不以不同期間的數值判斷遺失。統計讀取不增加次數。測試出席只用假資料。
 4. 若重啟後出現 `storage:"memory"`，先檢查機密設定是否移除、部署是否回退；不要清除資料庫或另建新庫。設定只填一半會停止啟動，不會靜默切回記憶體。

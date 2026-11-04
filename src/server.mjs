@@ -69,7 +69,11 @@ export function createApp({ service, reports = new ReportService(configuredRepor
         }
         if (apiPath === '/api/meta' && req.method === 'GET') { json(200, await activeService.metadata()); return; }
         if (apiPath === '/api/reports/meta' && req.method === 'GET') { json(200,activeReports.metadata()); return; }
-        if (apiPath === '/api/reports/summary' && req.method === 'GET') { json(200,await activeReports.summary({week:url.searchParams.get('week')}));return; }
+        if (apiPath === '/api/reports/summary' && req.method === 'GET') {
+          usageOperation=true;
+          const result=await activeReports.summary({week:url.searchParams.get('week'),source:url.searchParams.get('source')??'primary'});
+          recordUsage(()=>usage.recordOperation(usageGroup,'reportReads'));json(200,result);return;
+        }
         if (apiPath === '/api/reports/weekly' && req.method === 'GET') {
           usageOperation=true;
           const result=await activeReports.weekly({ week:url.searchParams.get('week'),source:url.searchParams.get('source') ?? 'primary',group:url.searchParams.get('group') });

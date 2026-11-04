@@ -1,4 +1,5 @@
 import { ensure } from './errors.mjs';
+import { loadChurchSummary } from './church-summary.mjs';
 export const REPORT_FIELDS=['sunday','gospel','home-in','home-out','reading','group','children-sunday','children-group'];
 const GENERAL=REPORT_FIELDS.slice(0,6),CHILDREN=REPORT_FIELDS.slice(6);
 const valid=n=>n===null || (Number.isSafeInteger(n) && n>=0);
@@ -103,5 +104,9 @@ export class ChurchReportAdapter {
     const snapshot=await this.snapshot(week,meta),result=this.counts(snapshot,2,meta.reportGroups);
     let extra;try{extra=extraRow(result.rows,result.totals,'other:church','未分大組／其他');}catch(error){if(error.code==='REPORT_MOVED')this.store.snapshots.delete(week.key);throw error;}
     return {rows:[...result.rows,...extra],loadedAt:snapshot.loadedAt,cacheSeconds:60};
+  }
+  async churchSummary(week,meta) {
+    ensure(meta.supportsChurchReport,403,'REPORT_SCOPE','這個帳號沒有可確認的全召會報表權限。');
+    return loadChurchSummary(this.base,this.store,week,meta);
   }
 }
