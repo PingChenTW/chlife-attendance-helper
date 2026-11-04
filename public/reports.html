@@ -26,9 +26,10 @@
         <p id="report-progress" class="mode-banner"></p>
         <label class="field-label" id="report-detail-label" for="report-district">查看小區</label><div class="select-wrap"><select id="report-district"></select><span aria-hidden="true">⌄</span></div>
         <section class="report-detail" aria-labelledby="detail-title"><h2 id="detail-title">大組小計</h2><div id="report-metrics" class="report-metrics"></div></section>
-        <p class="report-help report-note">一般聚會沿用正式週報預設口徑，主日由原站拆分兒童。兒童主日、兒童排專欄統計「學齡前、國小」，含已受浸兒童，範圍與原站「童（福朋）」欄不同。家聚會合計為受訪＋出訪，同人兩項都有登錄會計兩次。</p>
+        <p id="report-definition" class="report-help report-note"></p>
         <details id="full-report"><summary id="report-table-toggle">查看各小區完整表格</summary><p class="report-help">表格可左右滑動；「—」代表尚未設定或無法確認。</p><div class="table-scroll" role="region" aria-label="完整報表，可左右捲動" tabindex="0"><table id="report-table"><caption id="table-caption"></caption><thead></thead><tbody></tbody><tfoot></tfoot></table></div><button id="report-download" class="secondary-button">下載 CSV（Excel 可開啟）</button></details>
         <p id="baseline-note" class="report-help report-note"></p>
+        <p id="report-comparison" class="report-help report-note" hidden></p>
         <p class="report-help report-note">報表不受手機自選名單影響。比率＝人數÷基數；小計以總人數÷總基數計算。大組基數可獨立設定；小區未設定時，其比率顯示「—」。直屬、歷史或未列小區資料若有出席，會另列「其他」，保持與正式大組合計一致。</p>
       </section>
     </main>
