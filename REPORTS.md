@@ -40,6 +40,8 @@
 
 ## 修改與驗證位置
 
+正式版本已於 2026-11-04 發布：程式提交 `a799ce374ce7ad132e18571f8042110bb60e16b9`，[Pages run 71](https://github.com/PingChenTW/chlife-attendance-helper/actions/runs/41784386420) 成功，Render `dep-dblcrjbm8hqs738u3b1g` 為 Live。兩站前端檔案一致；正式本週／上週 API、八組範圍、分齡加總與比較列核對通過。上週 W44 兒童主日為學齡前 64、小學 57、合計 121，僅作此次讀取比對紀錄，不是固定期望值。使用統計跨本次部署保持 Redis 累計及原起始時間；未寫入真實出席。後續文件提交與後端程式提交不同屬正常，見 [HANDOFF.md](HANDOFF.md)。
+
 | 檔案 | 責任 |
 | --- | --- |
 | [src/church-summary.mjs](src/church-summary.mjs) | 正式欄位對應、角色加總、缺值／範圍檢查、單來源快取 |
