@@ -48,8 +48,9 @@
 | GitHub Pages 的預設大組 | [scripts/build.mjs](scripts/build.mjs) 的正式建置設定，目前為 `6` |
 | 手機自選名單與首次帶入 | [public/selection.js](public/selection.js) 的 `SelectionStore`，一般按手機／入口／小區／聚會保存 ID，兒童維持按小區另存；[public/app.js](public/app.js) 切換聚會時切換名單，首次讀該聚會上週出席 |
 | 原網站登入及點名介面 | [src/upstream.mjs](src/upstream.mjs) |
+| 全召會完整總表與兒童主日分齡 | [REPORTS.md](REPORTS.md)；欄位與 CSV 在 report-model.js，原站計算轉接在 church-summary.mjs，選全召會用 summary API |
 | 正式週報的八大組與全召會彙總 | [src/church-reports.mjs](src/church-reports.mjs)、[src/reports.mjs](src/reports.mjs) |
-| 手機介面離線快取 | [public/sw.js](public/sw.js)，目前 `attendance-shell-v18`；包含靜態說明及統計介面，不快取 API、名單或帳密 |
+| 手機介面離線快取 | [public/sw.js](public/sw.js)，本次 `attendance-shell-v19`；包含靜態說明及統計介面，不快取 API、名單或帳密 |
 | 自動測試與 Pages 發布 | [.github/workflows/pages.yml](.github/workflows/pages.yml) |
 
 若日後更換預設大組，要同時調整 Render 的 `DEFAULT_GROUP` 與 `scripts/build.mjs` 的正式前端預設值；測試也要一併更新。不要只改首頁文字。
@@ -77,6 +78,7 @@
 - 「預設大組入口尚未設定」：確認 `DEFAULT_GROUP` 為字串 `6`，且 `links` 有 `group:"6"`，其 `source` 對應有效來源。設定錯誤應停止啟動，不能臨時改用舊帳號。
 - 「大組專屬入口尚未啟用」：核對 `GROUP_LINKS_JSON` 的 `links`，不要把錯誤入口轉到另一大組。
 - 報表頻率限制：依提示稍候；彙總快照最多共用約一分鐘，畫面會顯示資料時間。
+- 完整總表未出現／501：確認 Pages 的 reports.js 與 Render 同版，選全召會時應呼叫 summary；一般大組仍用 weekly。403 是來源沒有完整全召會權限，不改用其他帳號代查；502 先查原站角色／衍生聚會契約，不把缺失資料補零。兒童主日分齡合計與兒童召會生活不同，定義見 REPORTS.md。比較列只供唯讀，不擴大可點名週次。
 - 發現部署問題時先停用寫入再調查；回退版本必須支援 `DEFAULT_GROUP`，不能回退到仍要求舊帳密、卻已移除相關設定的版本。不要為回退重新填回已停用的舊帳密。手機若回到舊共用版會讀舊副本，不能拿它覆寫新的 `:meeting:` 名單；保留所有 ID 鍵，不叫使用者清除資料。
 
 維護紀錄僅保存提交編號、測試結果、部署狀態與彙總筆數，不保存人名、帳密、名單簽章或登入憑證。
