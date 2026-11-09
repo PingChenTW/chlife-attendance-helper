@@ -12,7 +12,7 @@ export function createPracticeApi() {
     });
   }
   const scopes = [{ key: '611', label: '611區', path: '示範大組 / 611區', level: 3 }, { key: '612', label: '612區', path: '示範大組 / 612區', level: 3 }];
-  const meetings = [['sunday', '主日'], ['home-out', '家聚會出訪'], ['home-in', '家聚會受訪'], ['group', '排聚會'], ['prayer', '禱告聚會'], ['reading', '生命讀經'], ['gospel', '福音出訪']].map(([key, label]) => ({ key, label }));
+  const meetings = [['sunday', '主日'], ['home-out', '家聚會出訪'], ['home-in', '家聚會受訪'], ['group', '排聚會'], ['prayer', '禱告聚會'], ['reading', '生命讀經'], ['gospel', '福音出訪'], ['morning', '晨興']].map(([key, label]) => ({ key, label }));
   const childMeetings = [['children-sunday', '兒童主日'], ['children-group', '兒童排'], ['children-home', '兒童家聚會']].map(([key, label]) => ({ key, label }));
   const recordMeeting = meeting => meeting === 'children-sunday' ? 'sunday' : meeting;
   const names = ['示範陳弟兄', '示範林姊妹', '示範張弟兄', '示範黃姊妹', '示範吳弟兄', '示範劉姊妹', '示範蔡弟兄', '示範王姊妹'];

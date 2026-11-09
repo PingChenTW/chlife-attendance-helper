@@ -1,4 +1,6 @@
 // Only member IDs are stored on this device; names and attendance stay in memory.
+// Historical shared lists apply only to the original seven meetings. New meetings seed independently.
+const LEGACY_SHARED_MEETINGS = new Set(['sunday', 'home-out', 'home-in', 'group', 'prayer', 'reading', 'gospel']);
 export function selectionKey(meta, scope, audience = 'all', meeting) {
   return 'attendance-selected:v1:' + [meta.mode, meta.church, scope].map(encodeURIComponent).join(':') + (audience === 'children' ? ':children' : '') + (meta.siteKey ? ':site:'+encodeURIComponent(meta.siteKey) : '') + (audience === 'all' && meeting ? ':meeting:'+encodeURIComponent(meeting) : '');
 }
@@ -48,9 +50,10 @@ export class SelectionStore {
     if (this.migrated.has(sharedKey)) return;
     const selected = this.load(meta, scope);
     if (!this.has(meta, scope)) return;
-    // Preserve the shared list as a backup; copy all seven before any individual list is edited.
+    // Preserve the shared list as a backup; migrate only the original seven destinations.
     this.migrated.add(sharedKey);
     for (const { key: meeting } of meta.meetings ?? []) {
+      if (!LEGACY_SHARED_MEETINGS.has(meeting)) continue;
       if (!this.has(meta, scope, 'all', meeting)) this.save(meta, scope, 'all', selected, meeting);
     }
   }
