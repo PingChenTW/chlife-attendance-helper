@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { AppError, ensure } from './errors.mjs';
 import { selectMeetings, selectChildMeetings, selectScopes, memberMatchesScope } from './scopes.mjs';
+import { traceStage } from './diagnostics.mjs';
 
 const BASE = 'https://www.chlife-stat.org/api';
 export class ChlifeAdapter {
@@ -11,17 +12,25 @@ export class ChlifeAdapter {
     this.fetch = fetchImpl; this.auth = null; this.authPromise = null; this.metaCache = new Map();
   }
   async raw(path, { method = 'GET', body, token, idempotencyKey } = {}) {
+    const stage=path==='/auth/login'?'upstream-login':path==='/auth/refresh'?'upstream-refresh':path.startsWith('/admin/church-tree')?'upstream-directory':path==='/meetings'?'upstream-meetings':path==='/members'?'upstream-roster':path==='/attendance'?'upstream-attendance':'upstream-report';
+    return traceStage(stage,async()=>{
     let response, data;
     try {
       response = await this.fetch(BASE + path, { method, signal: AbortSignal.timeout(20000), redirect: 'error',
         headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}) });
       data = await response.json();
-    } catch { throw new AppError(502, 'UPSTREAM_UNAVAILABLE', '暫時無法連接原網站，請稍後再試。'); }
-    if (response.status === 401) throw new AppError(502, 'UPSTREAM_AUTH_EXPIRED', '原網站登入已過期，請稍後重新查詢。');
-    if(response.status===429){const seconds=Math.max(1,Math.min(120,Number(response.headers.get('retry-after'))||60));const error=new AppError(429,'UPSTREAM_RATE_LIMIT',`原網站報表查詢較頻繁，請約 ${seconds} 秒後重新讀取。`);error.retryAfter=seconds;throw error;}
-    ensure(response.ok && data.success, 502, 'UPSTREAM_REJECTED', '原網站未接受這次操作，請重新查詢或聯絡管理者。');
+    } catch(cause) {
+      const timeout=['TimeoutError','AbortError'].includes(cause?.name);
+      const error=new AppError(502,timeout?'UPSTREAM_TIMEOUT':cause instanceof SyntaxError?'UPSTREAM_FORMAT':'UPSTREAM_UNAVAILABLE',timeout?'連接原網站逾時，請稍後重新讀取。':'暫時無法連接原網站，請稍後再試。');
+      if(response)error.upstreamStatus=response.status;throw error;
+    }
+    const reject=(code,message,status=502)=>{const error=new AppError(status,code,message);error.upstreamStatus=response.status;return error;};
+    if (response.status === 401) throw reject('UPSTREAM_AUTH_EXPIRED','原網站登入已過期，請稍後重新查詢。');
+    if(response.status===429){const seconds=Math.max(1,Math.min(120,Number(response.headers.get('retry-after'))||60));const error=reject('UPSTREAM_RATE_LIMIT',`原網站目前限制請求，請約 ${seconds} 秒後重新讀取。`,429);error.retryAfter=seconds;throw error;}
+    if(!response.ok || !data?.success)throw reject('UPSTREAM_REJECTED','原網站未接受這次操作，請重新查詢或聯絡管理者。');
     return data.data;
+    });
   }
   async authenticate() {
     if (this.auth && this.auth.expires > Date.now() + 60000) return this.auth;

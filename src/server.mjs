@@ -11,14 +11,20 @@ import { configuredGroups } from './group-links.mjs';
 import { groupManifest } from '../public/group-context.js';
 import { UsageStatistics } from './usage.mjs';
 import { configuredUsage } from './persistent-usage.mjs';
+import { createRequestTrace, diagnosticScope, emitDiagnostic, errorStage } from './diagnostics.mjs';
 
 const PUBLIC = path.resolve(fileURLToPath(new URL('../public/', import.meta.url)));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
-export function createApp({ service, reports = new ReportService(configuredReportSources(service.adapter)), groups = new Map(), defaultGroup = null, allowedOrigins = [], apiBase = '', usage = new UsageStatistics({ groups: [...groups.keys()], mode: service.adapter.mode }) }) {
+export function createApp({ service, reports = new ReportService(configuredReportSources(service.adapter)), groups = new Map(), defaultGroup = null, allowedOrigins = [], apiBase = '', usage = new UsageStatistics({ groups: [...groups.keys()], mode: service.adapter.mode }), logDiagnostic = service.adapter.mode === 'live' ? event=>console.log(JSON.stringify(event)) : ()=>{} }) {
   const limits = new Map();
   const recordUsage = action => { try { action(); } catch { /* Usage failures cannot mask an attendance result. */ } };
   const connectOrigin = apiBase ? new URL(apiBase).origin : '';
-  return http.createServer(async (req, res) => {
+  return http.createServer((req, res) => {
+    const trace=createRequestTrace(req.url,defaultGroup,logDiagnostic);
+    return diagnosticScope(trace,async()=>{
+    if(trace){res.setHeader('X-Request-ID',trace.requestId);emitDiagnostic('request-start','helper');
+      res.once('finish',()=>emitDiagnostic('request-complete','helper',{durationMs:Date.now()-trace.started,status:res.statusCode}));
+      res.once('close',()=>{if(!res.writableEnded)emitDiagnostic('client-disconnected','helper',{durationMs:Date.now()-trace.started});});}
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -29,15 +35,16 @@ export function createApp({ service, reports = new ReportService(configuredRepor
     let usageGroup = defaultGroup, usageOperation = false, usageMeeting;
     try {
       const url = new URL(req.url, 'http://localhost');
-      if (url.pathname.startsWith('/api/')) {
+      if (url.pathname.startsWith('/api/') || url.pathname === '/health') {
         const origin = req.headers.origin;
         // Host is used only to compare a same-origin request, never to construct upstream URLs.
         const sameOrigin = origin && (origin === `http://${req.headers.host}` || origin === `https://${req.headers.host}`);
         ensure(!origin || sameOrigin || allowedOrigins.includes(origin), 403, 'ORIGIN_NOT_ALLOWED', '此網頁來源尚未開放連接。');
-        if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
+        if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); res.setHeader('Access-Control-Expose-Headers','X-Request-ID, Retry-After'); }
         if (req.method === 'OPTIONS') {
           res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Attendance-Client, X-Usage-Client', 'Access-Control-Max-Age': '600' }); res.end(); return;
         }
+        if(url.pathname === '/health' && req.method === 'GET'){json(200,{ok:true,mode:service.adapter.mode,writesEnabled:service.allowWrites});return;}
         const key = req.socket.remoteAddress;
         const now = Date.now();
         for (const [ip, entry] of limits) if (entry.reset < now) limits.delete(ip);
@@ -47,7 +54,7 @@ export function createApp({ service, reports = new ReportService(configuredRepor
         const kind = statistics ? req.method === 'POST' ? 'usageEvent' : 'usageRead' : req.method === 'POST' ? 'write' : 'read';
         counter[kind] = (counter[kind] ?? 0) + 1; limits.set(key, counter);
         const quota = { write: 15, read: 120, usageEvent: 240, usageRead: 60 }[kind];
-        if (counter[kind] > quota) { res.setHeader('Retry-After', String(Math.ceil((counter.reset - now) / 1000))); throw new AppError(429, 'RATE_LIMIT', '操作較頻繁，請稍後再試。'); }
+        if (counter[kind] > quota) { if(trace)recordUsage(()=>usage.recordRateLimited(trace.group));res.setHeader('Retry-After', String(Math.ceil((counter.reset - now) / 1000))); throw new AppError(429, 'RATE_LIMIT', '操作較頻繁，請稍後再試。'); }
         if (url.pathname === '/api/usage/summary' && req.method === 'GET') {
           json(200, await usage.summary({ period: url.searchParams.get('period') ?? '7d', group: url.searchParams.get('group') ?? 'all' })); return;
         }
@@ -58,6 +65,15 @@ export function createApp({ service, reports = new ReportService(configuredRepor
           let event; try { event = JSON.parse(Buffer.concat(chunks).toString()); } catch { throw new AppError(400, 'BAD_JSON', '使用統計事件格式不正確。'); }
           usage.recordView(event); json(202, { recorded: true }); return;
         }
+        if(url.pathname === '/api/usage/diagnostics' && req.method === 'POST'){
+          ensure(req.headers['content-type']?.split(';')[0].trim()==='application/json'&&req.headers['x-usage-client']==='1',415,'JSON_REQUIRED','請使用點名工具回報連線狀況。');
+          const chunks=[];let size=0;
+          for await(const chunk of req){size+=chunk.length;ensure(size<=768,413,'TOO_LARGE','連線回報資料過大。');chunks.push(chunk);}
+          let event;try{event=JSON.parse(Buffer.concat(chunks).toString());}catch{throw new AppError(400,'BAD_JSON','連線回報格式不正確。');}
+          const recorded=usage.recordClientDiagnostic(event);
+          if(recorded)try{logDiagnostic({type:'attendance-client-diagnostic',at:new Date().toISOString(),group:event.group,stage:event.stage,code:event.code,durationMs:event.durationMs,clientOccurredAt:event.occurredAt});}catch{}
+          json(202,{recorded});return;
+        }
         let apiPath=url.pathname,activeService=service,activeReports=reports;
         if(apiPath.startsWith('/api/groups/')) {
           const match=apiPath.match(/^\/api\/groups\/([1-8])\/(.+)$/);
@@ -67,7 +83,7 @@ export function createApp({ service, reports = new ReportService(configuredRepor
           activeService=entry.service;activeReports=entry.reports;apiPath='/api/'+match[2];
           usageGroup=match[1];
         }
-        if (apiPath === '/api/meta' && req.method === 'GET') { json(200, await activeService.metadata()); return; }
+        if (apiPath === '/api/meta' && req.method === 'GET') { usageOperation=true;const result=await activeService.metadata();recordUsage(()=>usage.recordOperation(usageGroup,'metadataReads'));json(200,result);return; }
         if (apiPath === '/api/reports/meta' && req.method === 'GET') { json(200,activeReports.metadata()); return; }
         if (apiPath === '/api/reports/summary' && req.method === 'GET') {
           usageOperation=true;
@@ -110,10 +126,12 @@ export function createApp({ service, reports = new ReportService(configuredRepor
       else { try { content = await readFile(target); } catch { throw new AppError(404, 'NOT_FOUND', '找不到此頁面。'); } }
       res.writeHead(200, { 'Content-Type': types[path.extname(target)] }); res.end(req.method === 'HEAD' ? undefined : content);
     } catch (error) {
-      if(usageOperation)recordUsage(()=>usage.recordFailure(usageGroup,usageMeeting));
-      if (!res.headersSent) json(error instanceof AppError ? error.status : 500, { error: { code: error instanceof AppError ? error.code : 'INTERNAL_ERROR', message: error instanceof AppError ? error.message : '暫時無法完成操作，請稍後再試。' } });
+      emitDiagnostic('request-error',errorStage(error),{durationMs:trace?Date.now()-trace.started:0,error,status:error instanceof AppError?error.status:500});
+      if(usageOperation)recordUsage(()=>usage.recordFailure(usageGroup,usageMeeting,trace?.operation));
+      if (!res.headersSent) json(error instanceof AppError ? error.status : 500, { error: { code: error instanceof AppError ? error.code : 'INTERNAL_ERROR', message: error instanceof AppError ? error.message : '暫時無法完成操作，請稍後再試。', ...(trace?{stage:errorStage(error),requestId:trace.requestId}:{}) } });
       else res.end();
     }
+    });
   });
 }
 
@@ -140,6 +158,6 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const server = createApp({ ...runtime, usage, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean) });
   server.requestTimeout = 60000; server.headersTimeout = 15000;
   const port = Number(process.env.PORT ?? 4173), host = process.env.HOST ?? '127.0.0.1';
-  server.listen(port, host, () => console.log(`Attendance helper: http://${host}:${port} (${mode}, writes ${runtime.service.allowWrites ? 'enabled' : 'disabled'})`));
+  server.listen(port, host, () => {console.log(`Attendance helper: http://${host}:${port} (${mode}, writes ${runtime.service.allowWrites ? 'enabled' : 'disabled'})`);console.log(JSON.stringify({type:'attendance-diagnostic',event:'boot',at:new Date().toISOString()}));});
   process.once('SIGTERM', () => { server.close(); void usage.flush?.(); });
 }
