@@ -37,6 +37,17 @@ function database(now = () => new Date()) {
   return { store: new RedisUsageStore({ command }), calls, setOffline: value => { offline = value; }, loseNextReply: () => { loseReply = true; } };
 }
 
+test('diagnostic counters persist across restarts and anonymous retry receipts do not double count', async () => {
+  const db=database(),first=new PersistentUsageStatistics({store:db.store,groups:['6']});
+  const event={group:'6',stage:'helper-connect',code:'CLIENT_TIMEOUT',durationMs:90000,occurredAt:new Date().toISOString(),eventId:randomUUID()};
+  first.recordFailure('6',undefined,'metadata');first.recordOperation('6','metadataReads');first.recordRateLimited('6');first.recordClientDiagnostic(event);await first.flush();
+  const second=new PersistentUsageStatistics({store:db.store,groups:['6']});second.recordClientDiagnostic(event);
+  const result=await second.summary({period:'today',group:'6'});
+  assert.equal(result.totals.metadataFailures,1);assert.equal(result.totals.failures,1);assert.equal(result.totals.metadataReads,1);assert.equal(result.totals.rateLimited,1);assert.equal(result.totals.clientConnectionFailures,1);
+  assert.equal(result.lifetimeTotals.clientConnectionFailures,1);
+  assert.doesNotMatch(JSON.stringify(db.calls),new RegExp(event.eventId+'|CLIENT_TIMEOUT|helper-connect|occurredAt'));
+});
+
 test('persistent counts survive new processes, Taipei midnight and more than thirty days', async () => {
   let current = new Date('2026-11-02T15:59:00Z'); const now = () => current, db = database(now);
   const first = new PersistentUsageStatistics({ store: db.store, now, groups: ['1','6'] });
@@ -100,7 +111,12 @@ test('ambiguous commit/retry and a batch repeated across restarts do not double 
   restarted.recordSubmission('6', id, result, 'prayer'); await restarted.flush();
   const summary = await restarted.summary({ group: '6' });
   assert.equal(summary.totals.attendanceViews, 1); assert.equal(summary.totals.submissions, 1); assert.equal(summary.totals.confirmedChanges, 3);
-  assert.doesNotMatch(JSON.stringify(db.calls), new RegExp(`${id}|PRIVATE|members|999`));
+  assert.doesNotMatch(JSON.stringify(db.calls), new RegExp(`${id}|PRIVATE|members`));
+  // Digests may legitimately contain "999"; inspect the actual values instead of substring matching keys.
+  for(const call of db.calls.filter(call=>call[1]===WRITE_USAGE))for(const event of JSON.parse(call.at(-1))){
+    assert.ok(Object.keys(event).every(key=>['group','at','startedAt','changes','meeting','seed'].includes(key)));
+    assert.ok(Object.keys(event.changes).every(key=>['attendanceViews','submissions','confirmedBatches','unconfirmedBatches','confirmedChanges'].includes(key)));
+  }
   assert.doesNotMatch(JSON.stringify(summary), /receipt|redis\.io|Bearer|PRIVATE/);
 });
 

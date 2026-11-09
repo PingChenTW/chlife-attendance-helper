@@ -35,6 +35,7 @@ function render(data) {
     ['attendanceViews','點名頁開啟','次'],['rosterReads','名單查詢','次'],['submissions','點名送出','批'],['reportReads','報表查詢','次']
   ].map(([field, label, unit]) => { const card = document.createElement('div'); card.className = 'usage-card'; card.append(text('span', label), text('strong', number(data.totals[field])), text('small', unit)); return card; }));
   $('usage-outcomes').textContent = `已確認 ${number(data.totals.confirmedBatches)} 批 · 需核對 ${number(data.totals.unconfirmedBatches)} 批\n確認修改 ${number(data.totals.confirmedChanges)} 筆\n報表頁開啟 ${number(data.totals.reportViews)} 次 · 操作錯誤 ${number(data.totals.failures)} 次`;
+  $('usage-diagnostics').textContent=`初始化成功 ${number(data.totals.metadataReads)} 次 · 初始化失敗 ${number(data.totals.metadataFailures)} 次\n手機連線失敗回報 ${number(data.totals.clientConnectionFailures)} 次 · 輔助主機限制請求 ${number(data.totals.rateLimited)} 次`;
   $('usage-empty').hidden = Object.values(data.totals).some(value => Number.isSafeInteger(value) && value > 0);
   const max = Math.max(1, ...data.daily.map(day => day.attendanceViews + day.reportViews));
   $('usage-trend').replaceChildren(...data.daily.map(day => {

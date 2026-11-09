@@ -19,6 +19,8 @@
 
 ## 計數定義
 
+連線監測的四個新增欄位、分階段日誌與手機暫存補送見 [DIAGNOSTICS.md](DIAGNOSTICS.md)。`metadataReads`／`metadataFailures`／`clientConnectionFailures`／`rateLimited` 自新版啟用後才監測；不能把歷史零值當作正常服務證明。初始化失敗同時計入既有 failures，手機連線回報與限流分開列出。斷線補送按伺服器接收當日計數，不倒填手機時間。
+
 | 欄位 | 畫面／定義 |
 | --- | --- |
 | `attendanceViews` | 點名頁成功取得初始化資料後，前端最佳努力回報一次；同一頁生命週期不重複回報，重新開啟可再計 |
@@ -29,7 +31,7 @@
 | `confirmedBatches` | 本批全部目標經回查已確認 |
 | `unconfirmedBatches` | 本批結果為 partial／unconfirmed，仍有需要核對的目標 |
 | `confirmedChanges` | 回查符合目標的筆數，包含新增與取消，並非人數或實際出席人數 |
-| `failures` | 名單、週報或點名 API 已進入相關處理後拋出錯誤的次數；不包含前置 CORS／限流錯誤、metadata 初始化失敗及統計 API 本身 |
+| `failures` | 名單、週報或點名 API 已進入相關處理後拋出錯誤的次數；本版起包含 metadata 初始化失敗；不包含前置 CORS／限流拒絕及統計 API 本身（輔助主機限流另列） |
 
 API 查詢也可能來自維護檢查，不限手機瀏覽器。查看統計頁不計入開啟或報表次數，統計頁沒有自動輪詢；按「更新統計」才重新讀取。
 
@@ -58,7 +60,7 @@ API 查詢也可能來自維護檢查，不限手機瀏覽器。查看統計頁�
 
 ## 發布、驗證與排查
 
-1. `npm test` 與正式 `API_BASE_URL` 建置；UI 改動更新 Service Worker，本版為 `attendance-shell-v20`。統計 API 永不進入離線允許清單。
+1. `npm test` 與正式 `API_BASE_URL` 建置；UI 改動更新 Service Worker，本版為 `attendance-shell-v21`。統計 API 永不進入離線允許清單。
 2. 前後端都需發布；GitHub 更新不會自動部署 Render。持久模式需要下面兩個機密設定，從 Upstash 資料庫的 REST 區取得，不可用唯讀 token。
 3. 驗證 API `storage:"redis"`、起始時間、累計與保存狀態；重啟前後比較同期間／同入口，不以不同期間的數值判斷遺失。統計讀取不增加次數。測試出席只用假資料。
 4. 若重啟後出現 `storage:"memory"`，先檢查機密設定是否移除、部署是否回退；不要清除資料庫或另建新庫。設定只填一半會停止啟動，不會靜默切回記憶體。
@@ -77,7 +79,7 @@ API 查詢也可能來自維護檢查，不限手機瀏覽器。查看統計頁�
 
 Redis namespace 為 `{attendance-usage-v1}:`：`startedAt` 起始時間字串、`lifetime` 各入口累計 hash、`day:YYYY-MM-DD` 每日 hash。欄位是 `group:metric`、`group:m:meeting:metric` 與 `group:lastActivity`。`receipt:*` 是三十分鐘短期去重；`receipt:seed-v1-*` 是少量不過期的承接標記。不要手動改正式數字或啟用自動淘汰；更換 namespace 會像新資料庫一樣重新開始。
 
-一次承接格式是最多八列的 JSON array，每列包含 `group`（字串）、`day`（台北日期）、`startedAt`、`at`（ISO 時間）、`counters`（九種白名單數值）、`meetings:[{key,counters}]`。必須取自同一天、各入口的 `period=today` 摘要，聚會合計不能大於入口合計。程式扣除聚會部分後再匯入一般部分，避免重複累加；固定入口／日期／聚會收據讓重啟重讀只承接一次。這不是通用歷史匯入器，換 snapshot 不能重複補差額；不要附上原站人名或出席。切換窗口內新發生、未被快照捕捉的操作可能漏計。
+一次承接格式是最多八列的 JSON array，每列包含 `group`（字串）、`day`（台北日期）、`startedAt`、`at`（ISO 時間）、`counters`（十三種白名單數值）、`meetings:[{key,counters}]`。必須取自同一天、各入口的 `period=today` 摘要，聚會合計不能大於入口合計。程式扣除聚會部分後再匯入一般部分，避免重複累加；固定入口／日期／聚會收據讓重啟重讀只承接一次。這不是通用歷史匯入器，換 snapshot 不能重複補差額；不要附上原站人名或出席。切換窗口內新發生、未被快照捕捉的操作可能漏計。
 
 ## 故障、額度與長期維護
 

@@ -1,7 +1,7 @@
 import { ensure } from './errors.mjs';
 import { MEETINGS, CHILD_MEETINGS } from './scopes.mjs';
 
-export const FIELDS = ['attendanceViews', 'reportViews', 'rosterReads', 'reportReads', 'submissions', 'confirmedBatches', 'unconfirmedBatches', 'confirmedChanges', 'failures'];
+export const FIELDS = ['attendanceViews', 'reportViews', 'rosterReads', 'reportReads', 'submissions', 'confirmedBatches', 'unconfirmedBatches', 'confirmedChanges', 'failures', 'metadataReads', 'metadataFailures', 'clientConnectionFailures', 'rateLimited'];
 export const MEETING_LABELS = new Map([...MEETINGS, ...CHILD_MEETINGS].map(([key, label]) => [key, label]));
 const NUMERALS = ['', '一', '二', '三', '四', '五', '六', '七', '八'];
 const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -47,10 +47,26 @@ export class UsageStatistics {
     this.record(body.group, { [body.page === 'attendance' ? 'attendanceViews' : 'reportViews']: 1 });
   }
   recordOperation(group, kind, meeting) {
-    ensure(['rosterReads', 'reportReads'].includes(kind), 400, 'USAGE_EVENT', '使用統計事件格式不正確。');
+    ensure(['rosterReads', 'reportReads', 'metadataReads'].includes(kind), 400, 'USAGE_EVENT', '使用統計事件格式不正確。');
     this.record(group, { [kind]: 1 }, meeting);
   }
-  recordFailure(group, meeting) { this.record(group, { failures: 1 }, meeting); }
+  recordFailure(group, meeting, operation) { this.record(group, { failures: 1, ...(operation === 'metadata' ? {metadataFailures:1} : {}) }, meeting); }
+  recordRateLimited(group) { this.record(group, {rateLimited:1}); }
+  recordClientDiagnostic(body) {
+    const fields=['group','stage','code','durationMs','occurredAt','eventId'];
+    ensure(body && !Array.isArray(body) && Object.keys(body).length === fields.length && Object.keys(body).every(key=>fields.includes(key)) &&
+      ['helper-connect','metadata','roster','attendance','report'].includes(body.stage) && ['CLIENT_TIMEOUT','CLIENT_NETWORK','CLIENT_OFFLINE','HELPER_NON_JSON'].includes(body.code) &&
+      Number.isSafeInteger(body.durationMs) && body.durationMs >= 0 && body.durationMs <= 600000 &&
+      typeof body.occurredAt === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(body.occurredAt) && !Number.isNaN(Date.parse(body.occurredAt)) &&
+      typeof body.eventId === 'string' && /^[a-f0-9-]{36}$/i.test(body.eventId), 400, 'USAGE_EVENT', '連線回報格式不正確。');
+    this.groupKey(body.group); this.prune();
+    const key='diagnostic:'+body.group+':'+body.eventId;
+    if(this.submitted.has(key)) return false;
+    if(this.submitted.size>=8000)this.submitted.delete(this.submitted.keys().next().value);
+    this.submitted.set(key,this.now().getTime()+30*60000);
+    // Persistent mode hashes this short-lived event key; only a numeric increment reaches Redis.
+    this.record(body.group,{clientConnectionFailures:1},undefined,key); return true;
+  }
   recordSubmission(group, requestId, result, meeting) {
     this.groupKey(group); this.prune();
     ensure(typeof requestId === 'string' && /^[0-9a-f-]{36}$/i.test(requestId) && ['confirmed','partial','unconfirmed'].includes(result?.status) &&

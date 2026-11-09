@@ -1,5 +1,7 @@
 # 一起點名維護手冊
 
+連線、初始化、逾時與分階段錯誤請依 [DIAGNOSTICS.md](DIAGNOSTICS.md) 查詢。手機有短查詢碼時用它搜尋 Render 應用日誌；沒查詢碼且提示連不上，需看手機回報是否在恢復後補送。只有零計數不能證明服務正常。公開統計是數值彙總，詳細階段日誌僅主機管理者可看。
+
 新接手請先讀 [AI／工程師交接指南](HANDOFF.md)，AI 同時讀 [AGENTS.md](AGENTS.md)。本頁負責日常修改、部署與問題排查；架構、API、測試位置及已知限制集中在交接指南。給使用者的簡短教學仍是 [手機使用說明](https://pingchentw.github.io/chlife-attendance-helper/help.html)。
 
 ## 正式入口
@@ -50,7 +52,7 @@
 | 原網站登入及點名介面 | [src/upstream.mjs](src/upstream.mjs) |
 | 全召會完整總表與兒童主日分齡 | [REPORTS.md](REPORTS.md)；欄位與 CSV 在 report-model.js，原站計算轉接在 church-summary.mjs，選全召會用 summary API |
 | 正式週報的八大組與全召會彙總 | [src/church-reports.mjs](src/church-reports.mjs)、[src/reports.mjs](src/reports.mjs) |
-| 手機介面離線快取 | [public/sw.js](public/sw.js)，本次 `attendance-shell-v20`；包含靜態說明及統計介面，不快取 API、名單或帳密 |
+| 手機介面離線快取 | [public/sw.js](public/sw.js)，本次 `attendance-shell-v21`；包含靜態說明及統計介面，不快取 API、名單或帳密 |
 | 自動測試與 Pages 發布 | [.github/workflows/pages.yml](.github/workflows/pages.yml) |
 
 若日後更換預設大組，要同時調整 Render 的 `DEFAULT_GROUP` 與 `scripts/build.mjs` 的正式前端預設值；測試也要一併更新。不要只改首頁文字。

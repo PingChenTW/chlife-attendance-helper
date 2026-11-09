@@ -2,6 +2,7 @@ import { changesFor, mergeDesired, allDesiredConfirmed, districtScopes } from '.
 import { createPracticeApi } from './practice.js';
 import { SelectionStore, selectedMembers, addPeopleMembers } from './selection.js';
 import { parseGroupContext, groupApiPath, applyGroupContext, redirectDefaultGroup } from './group-context.js';
+import { createConnectionClient, createDiagnosticReporter } from './connection.js';
 
 const redirecting=redirectDefaultGroup(window.location,window.ATTENDANCE_CONFIG);
 const linkGroup=parseGroupContext(window.location.search);applyGroupContext(linkGroup,document);
@@ -10,6 +11,9 @@ const $ = id => document.getElementById(id);
 const state = { meta: null, query: null, roster: null, drafts: new Map(), selected: new Set(), busy: false, loading: false, seq: 0, addSearch: '', addShowAll: false, lastSaved: false, meetingByAudience: {} };
 const base = String(window.ATTENDANCE_CONFIG?.apiBase ?? '').replace(/\/$/, '');
 const practice = window.ATTENDANCE_CONFIG?.practice ? createPracticeApi() : null;
+function diagnosticStorage(){try{return window.sessionStorage;}catch{return null;}}
+const diagnosticReporter=createDiagnosticReporter({apiBase:base,group:linkGroup.id??window.ATTENDANCE_CONFIG?.defaultGroup,enabled:!practice,storage:diagnosticStorage()});
+const connect=createConnectionClient({apiBase:base,reporter:diagnosticReporter});
 let usageReporter;
 function reportUsage(page, group) {
   usageReporter ??= import('./usage-client.js').then(module => module.createUsageReporter({ apiBase: base, enabled: !practice })).catch(() => null);
@@ -22,15 +26,11 @@ function notice(message, error = false, retry = false) {
   if (retry) { const button = document.createElement('button'); button.textContent = '重新讀取'; button.onclick = () => state.meta ? loadRoster({ preserve: true }) : start(); node.append(button); }
 }
 async function api(path, options = {}) {
-  const requestPath=groupApiPath(path,linkGroup);
+  const requestPath=path==='/health'?path:groupApiPath(path,linkGroup);
   if(linkGroup.id && practice)throw new Error('大組專屬連結需連接正式服務，目前為練習版。');
   if (practice) return practice(path, options);
-  let response;
-  try { response = await fetch(base + requestPath, { cache: 'no-store', credentials: 'omit', signal: AbortSignal.timeout(90000), ...options }); }
-  catch { throw new Error(navigator.onLine ? '連線中斷，尚未確認儲存。請重新讀取名單核對。' : '目前沒有網路，請連上網路後重新讀取。'); }
-  let data;
-  try { data = await response.json(); } catch { throw new Error('點名服務可能正在啟動，請稍候約一分鐘，再按「重新讀取」。'); }
-  if (!response.ok) throw new Error(data.error?.message ?? '暫時無法完成，請稍後再試。');
+  const stage=path==='/health'?'helper-connect':path.startsWith('/api/roster?')?'roster':path==='/api/attendance'?'attendance':'metadata';
+  const data=await connect(requestPath,options,stage);
   if (path.startsWith('/api/roster?') && new URLSearchParams(path.split('?')[1]).get('audience') === 'children' && data.audience !== 'children') throw new Error('兒童名單服務正在更新，請稍後重新讀取。');
   return data;
 }
@@ -226,8 +226,9 @@ async function submit() {
   }
 }
 async function start() {
-  notice('');
+  notice('正在連接點名服務，免費主機首次啟動可能需要約一分鐘…');
   try {
+    if(!practice){await api('/health');notice('點名服務已連接，正在取得小區與聚會資料…');}
     const meta = await api('/api/meta');
     meta.scopes = districtScopes(meta.scopes);
     if (!meta.scopes?.length || !meta.meetings?.length || !meta.weeks?.length) throw new Error('尚未取得可用的小區與聚會，請稍後再試。');
@@ -248,7 +249,7 @@ async function start() {
     await loadRoster();
   } catch (error) { notice(error.message, true, true); $('members').replaceChildren(); $('empty-state').hidden = false; $('empty-state').textContent = '暫時無法讀取，請稍後再試。'; }
 }
-function connection() { $('connection').textContent = navigator.onLine ? '已連網' : '未連網'; $('connection').classList.toggle('offline', !navigator.onLine); renderRoster(); }
+function connection() { $('connection').textContent = navigator.onLine ? '已連網' : '未連網'; $('connection').classList.toggle('offline', !navigator.onLine); if(navigator.onLine)void diagnosticReporter.flush();renderRoster(); }
 $('scope-select').onchange = e => changeScope('scope', e.target.value);
 $('children-only').onchange = e => changeScope('audience', e.target.checked ? 'children' : 'all');
 $('meeting-select').onchange = e => changeScope('meeting', e.target.value);

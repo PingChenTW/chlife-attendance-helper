@@ -1,6 +1,7 @@
 import { createHmac, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { AppError, ensure } from './errors.mjs';
 import { weekOptions, requireWeek } from './weeks.mjs';
+import { traceStage } from './diagnostics.mjs';
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const publicMember = row => ({ id: row.id, name: row.name, group: row.group, attended: row.attended, writable: row.writable });
@@ -37,12 +38,14 @@ export class AttendanceService {
     return { week, meta, scope, meeting, audience };
   }
   async metadata() {
+    return traceStage('initialize',async()=>{
     const weeks = weekOptions(this.now());
     const meta = await this.adapter.metadata(weeks[0]);
     return { church: meta.church, group: meta.group, weeks, mode: this.adapter.mode, writesEnabled: this.allowWrites, supportsChildren: meta.childMeetings?.length === 3,
       scopes: meta.scopes.map(({ key, label, path, level }) => ({ key, label, path, level })),
       meetings: meta.meetings.map(({ key, label }) => ({ key, label })),
       childMeetings: (meta.childMeetings ?? []).map(({ key, label }) => ({ key, label })) };
+    });
   }
   pack(query, members) {
     ensure(members.length <= 10000 && new Set(members.map(m => m.id)).size === members.length, 502, 'INVALID_ROSTER', '原網站名單格式有變動，請稍後再試。');
