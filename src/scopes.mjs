@@ -2,7 +2,8 @@ import { ensure } from './errors.mjs';
 export const MEETINGS = [
   ['sunday', '主日', '主日'], ['home-out', '家聚會出訪', '家聚會出訪'],
   ['home-in', '家聚會受訪', '家聚會受訪'], ['group', '排聚會', '小排'],
-  ['prayer', '禱告聚會', '禱告'], ['reading', '生命讀經', '生命讀經'], ['gospel', '福音出訪', '福音出訪']
+  ['prayer', '禱告聚會', '禱告'], ['reading', '生命讀經', '生命讀經'], ['gospel', '福音出訪', '福音出訪'],
+  ['morning', '晨興', '晨興']
 ];
 export const CHILD_MEETINGS = [
   ['children-sunday', '兒童主日', '主日'],

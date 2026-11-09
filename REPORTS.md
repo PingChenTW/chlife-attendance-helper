@@ -51,6 +51,6 @@
 | [public/reports.js](public/reports.js) | 選全召會改用 summary、卡片／表格／比較列 |
 | [test/church-summary.test.mjs](test/church-summary.test.mjs) | 分齡含受浸、官方總數、未知值、權限、快取、跨年基數與 CSV |
 
-修改後跑全套 `npm test` 與正式 `API_BASE_URL` 建置；UI 檢查手機寬度、分齡數字、大組卡片、完整表格、比較日期及 CSV。更新 Service Worker（本版 v19），Pages 與 Render 都需發布。不得修改 Render 的原站帳密、Redis 機密或手機名單鍵來排查本功能。
+修改後跑全套 `npm test` 與正式 `API_BASE_URL` 建置；UI 檢查手機寬度、分齡數字、大組卡片、完整表格、比較日期及 CSV。更新 Service Worker（本版 v20），Pages 與 Render 都需發布。不得修改 Render 的原站帳密、Redis 機密或手機名單鍵來排查本功能。
 
 本機及唯讀來源驗證：2026-11-04 的 87 項測試、正式建置通過；本週／上週總表可讀八大組，基數合計來自 CSV；每列兒童主日合計等於分齡兩欄。手機假資料已檢查 320／390 寬、25 個統計卡片、兩層表頭、8 個大組與兩列表尾、切換大組卡片及瀏覽器實際下載 CSV；頁面無橫向溢出，完整表格可獨立左右滑動。正式發布狀態以交接紀錄為準，不把來源讀取成功當作正式主機已更新。

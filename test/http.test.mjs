@@ -19,7 +19,7 @@ test('HTTP serves the app, limits CORS, hides internal files, and validates writ
   const cors = await fetch(base + '/api/meta', { headers: { Origin: 'https://example.github.io' } });
   assert.equal(cors.headers.get('access-control-allow-origin'), 'https://example.github.io');
   assert.equal(cors.headers.get('cache-control'), 'no-store');
-  const meta = await cors.json(); assert.equal(meta.meetings.length, 7);
+  const meta = await cors.json(); assert.equal(meta.meetings.length, 8);
   assert.equal(meta.supportsChildren, true);
   const reportMeta = await (await fetch(base + '/api/reports/meta')).json();
   assert.equal(reportMeta.sources.length,1); assert.equal('adapter' in reportMeta.sources[0],false);

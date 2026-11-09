@@ -50,7 +50,7 @@
 | 原網站登入及點名介面 | [src/upstream.mjs](src/upstream.mjs) |
 | 全召會完整總表與兒童主日分齡 | [REPORTS.md](REPORTS.md)；欄位與 CSV 在 report-model.js，原站計算轉接在 church-summary.mjs，選全召會用 summary API |
 | 正式週報的八大組與全召會彙總 | [src/church-reports.mjs](src/church-reports.mjs)、[src/reports.mjs](src/reports.mjs) |
-| 手機介面離線快取 | [public/sw.js](public/sw.js)，本次 `attendance-shell-v19`；包含靜態說明及統計介面，不快取 API、名單或帳密 |
+| 手機介面離線快取 | [public/sw.js](public/sw.js)，本次 `attendance-shell-v20`；包含靜態說明及統計介面，不快取 API、名單或帳密 |
 | 自動測試與 Pages 發布 | [.github/workflows/pages.yml](.github/workflows/pages.yml) |
 
 若日後更換預設大組，要同時調整 Render 的 `DEFAULT_GROUP` 與 `scripts/build.mjs` 的正式前端預設值；測試也要一併更新。不要只改首頁文字。
@@ -71,7 +71,7 @@
 ## 問題排查與回復
 
 - 使用統計歸零：先核對相同期間／入口及 API `storage`。正式應是 `redis`；若變成 `memory`，檢查 Render 的 `USAGE_REDIS_REST_URL`／`USAGE_REDIS_REST_TOKEN` 是否遺失或回退舊版。不能把資料庫連不上當零，不能清庫重來。若出現待同步、讀取錯誤，依 [USAGE.md](USAGE.md) 查額度、封存及連線。統計失敗仍可點名，不清手機資料、不重送出席。
-- 舊共用名單升級：一般七項各自增加 `:meeting:聚會代碼` 儲存後綴。`SelectionStore.migrateMeetings` 先承接原有共用 ID，再一次複製到所有尚未有名單的一般聚會鍵；保留舊副本，不覆蓋已有目的鍵，空名單也保留。修改任何新名單都不回寫舊共用鍵，不影響另外六項。兒童沒有新增 meeting 後綴，維持原規則。
+- 舊共用名單升級：一般七項各自增加 `:meeting:聚會代碼` 儲存後綴。`SelectionStore.migrateMeetings` 先承接原有共用 ID，再一次複製到原有七項白名單中尚未有名單的聚會鍵；保留舊副本，不覆蓋已有目的鍵，空名單也保留。修改任何新名單都不回寫舊共用鍵，不影響另外六項。晨興（`morning`）是新增第八項，不承接舊共用副本，依上週晨興出席初始化；已有或刻意清空的晨興名單優先保留。兒童沒有新增 meeting 後綴，維持原規則。
 - 首次帶入：`SelectionStore.initialize` 先承接舊資料，只在對應儲存鍵與當次工作階段均未初始化時執行。來源為 `meta.weeks[1]`、相同小區／聚會／一般或兒童，與目前名單取 ID 交集；只挑選人名，不修改原站出席。檢視上週重用目前名單，其他情況額外一次名單 API。成功空結果也保存，已有的空／非空／損壞紀錄均不覆蓋。失敗允許重試，遲到回應不能覆蓋選擇。無法保存時僅留當次工作階段並明確提醒，沒有新增雲端資料庫。
 - 自選名單像是消失：先確認是否從桌面網頁 App 改為 LINE／Safari／Chrome，這些環境可能不共用本機儲存空間。同一台手機不代表同一份名單；先回原先加入名單的環境、選相同小區及一般／兒童種類核對，不要先刪除捷徑、清除資料或重裝。現在同一瀏覽環境的原首頁與 `?group=6` 會共用六大組儲存鍵。`loadSelected` 只在六大組的新鍵不存在時承接舊首頁對應鍵，保留原副本；已有新鍵，即使名單為空也不覆蓋。此機制不做跨 App 同步。
 - 服務閒置或剛部署時可能需要啟動時間；先確認 Render 狀態，再重新讀取。不要因首次連線失敗就更換或公開帳密。
