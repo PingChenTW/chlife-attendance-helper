@@ -113,7 +113,7 @@ test('existing clients without an audience keep working with earlier all-member 
 test('children have exactly three meeting choices, with independent group and home attendance', async () => {
   const { service, query } = await setup(), meta = await service.metadata();
   assert.deepEqual(meta.childMeetings.map(meeting => meeting.label), ['兒童主日', '兒童排', '兒童家聚會']);
-  assert.equal(meta.meetings.length, 7);
+  assert.equal(meta.meetings.length, 8);
   await assert.rejects(service.roster({ ...query, audience: 'children' }), /無法使用這個聚會/);
   await assert.rejects(service.roster({ ...query, meeting: 'children-group' }), /無法使用這個聚會/);
   const childQuery = { ...query, audience: 'children', meeting: 'children-group' };

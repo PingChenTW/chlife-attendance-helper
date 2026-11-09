@@ -26,7 +26,7 @@ test('partial readback keeps unsaved choices; removed records cannot become fals
 test('static Pages practice works independently and keeps different meetings separate', async () => {
   const api = createPracticeApi();
   const meta = await api('/api/meta');
-  assert.equal(meta.mode, 'demo'); assert.equal(meta.meetings.length, 7);
+  assert.equal(meta.mode, 'demo'); assert.equal(meta.meetings.length, 8);
   const query = { week: meta.weeks[0].key, scope: meta.scopes[0].key, meeting: meta.meetings[0].key };
   const before = await api('/api/roster?' + new URLSearchParams(query));
   const input = { ...query, changes: [{ memberId: before.members[0].id, attended: true }] };
